@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../widgets/app_button.dart';
+import '../widgets/header.dart';
 
 class RegisterPage extends StatefulWidget {
   const RegisterPage({super.key});
@@ -9,6 +11,7 @@ class RegisterPage extends StatefulWidget {
 }
 
 class _RegisterPageState extends State<RegisterPage> {
+  final nameController = TextEditingController();
   final emailController = TextEditingController();
   final passwordController = TextEditingController();
 
@@ -19,10 +22,33 @@ class _RegisterPageState extends State<RegisterPage> {
   String selectedRole = 'owner';
 
   Future<void> register() async {
-    if (emailController.text.trim().isEmpty ||
-        passwordController.text.trim().isEmpty) {
+    final name = nameController.text.trim();
+    final email = emailController.text.trim();
+    final password = passwordController.text.trim();
+
+    if (name.isEmpty || email.isEmpty || password.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Email dan password wajib diisi')),
+        const SnackBar(
+          content: Text('Nama, email, dan password wajib diisi'),
+        ),
+      );
+      return;
+    }
+
+    if (!email.contains('@')) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Format email tidak valid'),
+        ),
+      );
+      return;
+    }
+
+    if (password.length < 6) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Password minimal 6 karakter'),
+        ),
       );
       return;
     }
@@ -31,31 +57,78 @@ class _RegisterPageState extends State<RegisterPage> {
       setState(() => isLoading = true);
 
       final response = await supabase.auth.signUp(
-        email: emailController.text.trim(),
-        password: passwordController.text.trim(),
+        email: email,
+        password: password,
       );
 
       final user = response.user;
 
-      if (user != null) {
+      if (user == null) {
+        throw Exception('User gagal dibuat');
+      }
+
+      final existingProfile = await supabase
+          .from('profiles')
+          .select('id')
+          .eq('id', user.id)
+          .maybeSingle();
+
+      if (existingProfile == null) {
         await supabase.from('profiles').insert({
           'id': user.id,
-          'email': emailController.text.trim(),
+          'name': name,
+          'email': email,
           'role': selectedRole,
         });
       }
 
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Register berhasil, silakan login')),
+      await showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          title: const Row(
+            children: [
+              Icon(Icons.check_circle, color: Colors.green),
+              SizedBox(width: 8),
+              Expanded(
+                child: Text("Registrasi Berhasil"),
+              ),
+            ],
+          ),
+          content: const Text(
+            "Akun berhasil dibuat. Kamu akan kembali ke halaman login.",
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text("OK"),
+            ),
+          ],
+        ),
       );
 
+      if (!mounted) return;
       Navigator.pop(context);
     } on AuthException catch (e) {
       if (!mounted) return;
+
+      String message = e.message;
+
+      if (message.toLowerCase().contains('user already registered')) {
+        message = 'Email sudah terdaftar';
+      } else if (message.toLowerCase().contains('password')) {
+        message = 'Password tidak valid';
+      } else if (message.toLowerCase().contains('email')) {
+        message = 'Email tidak valid';
+      }
+
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Register gagal: ${e.message}')),
+        SnackBar(content: Text('Register gagal: $message')),
       );
     } catch (e) {
       if (!mounted) return;
@@ -75,20 +148,33 @@ class _RegisterPageState extends State<RegisterPage> {
   }) {
     return InputDecoration(
       hintText: hint,
-      prefixIcon: prefix != null ? Icon(prefix) : null,
+      hintStyle: TextStyle(
+        color: Colors.grey.shade500,
+        fontSize: 15,
+      ),
+      prefixIcon: prefix != null ? Icon(prefix, color: Colors.grey.shade600) : null,
       suffixIcon: suffix,
       filled: true,
-      fillColor: Colors.grey.shade100,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+      fillColor: const Color(0xFFF7F7F7),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 16),
       border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(16),
         borderSide: BorderSide.none,
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(16),
+        borderSide: BorderSide(color: Colors.grey.shade200),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(16),
+        borderSide: const BorderSide(color: Colors.orange, width: 1.2),
       ),
     );
   }
 
   @override
   void dispose() {
+    nameController.dispose();
     emailController.dispose();
     passwordController.dispose();
     super.dispose();
@@ -97,144 +183,136 @@ class _RegisterPageState extends State<RegisterPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF6F6F6),
-      body: SingleChildScrollView(
-        child: Column(
-          children: [
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.fromLTRB(20, 70, 20, 28),
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [Color(0xFFFF7A1A), Color(0xFFFFA64D)],
-                ),
-                borderRadius: BorderRadius.vertical(
-                  bottom: Radius.circular(30),
-                ),
-              ),
-              child: Row(
-                children: [
-                  IconButton(
-                    onPressed: () => Navigator.pop(context),
-                    icon: const Icon(Icons.arrow_back, color: Colors.white),
+      backgroundColor: const Color(0xFFF8F5F2),
+      body: SafeArea(
+        child: SingleChildScrollView(
+          child: Column(
+            children: [
+              AppHeader(
+                leading: IconButton(
+                  onPressed: () => Navigator.pop(context),
+                  icon: const Icon(
+                    Icons.arrow_back,
+                    color: Colors.white,
                   ),
-                  const Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          "Create Account",
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 26,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        SizedBox(height: 6),
-                        Text(
-                          "Daftarkan akun baru untuk aplikasi",
-                          style: TextStyle(color: Colors.white70),
-                        ),
-                      ],
-                    ),
+                ),
+                subtitle: 'Daftarkan akun baru untuk aplikasi',
+              ),
+              Transform.translate(
+                offset: const Offset(0, -16),
+                child: Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 16),
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(24),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withAlpha(18),
+                        blurRadius: 18,
+                        offset: const Offset(0, 8),
+                      ),
+                    ],
                   ),
-                ],
-              ),
-            ),
-            Transform.translate(
-              offset: const Offset(0, -12),
-              child: Container(
-                margin: const EdgeInsets.symmetric(horizontal: 16),
-                padding: const EdgeInsets.all(18),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(22),
-                  boxShadow: const [
-                    BoxShadow(color: Colors.black12, blurRadius: 10),
-                  ],
-                ),
-                child: Column(
-                  children: [
-                    TextField(
-                      controller: emailController,
-                      decoration: inputStyle(
-                        hint: "Masukkan email",
-                        prefix: Icons.email_outlined,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        "Create Account",
+                        style: TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.black87,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 14),
-                    TextField(
-                      controller: passwordController,
-                      obscureText: obscurePassword,
-                      decoration: inputStyle(
-                        hint: "Masukkan password",
-                        prefix: Icons.lock_outline,
-                        suffix: IconButton(
-                          onPressed: () {
-                            setState(() {
-                              obscurePassword = !obscurePassword;
-                            });
-                          },
-                          icon: Icon(
-                            obscurePassword
-                                ? Icons.visibility_off
-                                : Icons.visibility,
+                      const SizedBox(height: 6),
+                      Text(
+                        "Buat akun baru untuk mulai menggunakan aplikasi",
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: Colors.grey.shade600,
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                      TextField(
+                        controller: nameController,
+                        textInputAction: TextInputAction.next,
+                        decoration: inputStyle(
+                          hint: "Masukkan nama",
+                          prefix: Icons.person_outline,
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      TextField(
+                        controller: emailController,
+                        keyboardType: TextInputType.emailAddress,
+                        textInputAction: TextInputAction.next,
+                        decoration: inputStyle(
+                          hint: "Masukkan email",
+                          prefix: Icons.email_outlined,
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      TextField(
+                        controller: passwordController,
+                        obscureText: obscurePassword,
+                        textInputAction: TextInputAction.done,
+                        onSubmitted: (_) {
+                          if (!isLoading) register();
+                        },
+                        decoration: inputStyle(
+                          hint: "Masukkan password",
+                          prefix: Icons.lock_outline,
+                          suffix: IconButton(
+                            onPressed: () {
+                              setState(() {
+                                obscurePassword = !obscurePassword;
+                              });
+                            },
+                            icon: Icon(
+                              obscurePassword
+                                  ? Icons.visibility_off_outlined
+                                  : Icons.visibility_outlined,
+                              color: Colors.grey.shade600,
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                    const SizedBox(height: 14),
-                    DropdownButtonFormField<String>(
-                      value: selectedRole,
-                      decoration: inputStyle(
-                        hint: "Pilih role",
-                        prefix: Icons.badge_outlined,
-                      ),
-                      items: const [
-                        DropdownMenuItem(
-                          value: 'owner',
-                          child: Text('Owner'),
+                      const SizedBox(height: 14),
+                      DropdownButtonFormField<String>(
+                        value: selectedRole,
+                        decoration: inputStyle(
+                          hint: "Pilih role",
+                          prefix: Icons.badge_outlined,
                         ),
-                        DropdownMenuItem(
-                          value: 'rider',
-                          child: Text('Rider'),
-                        ),
-                      ],
-                      onChanged: (value) {
-                        if (value != null) {
-                          setState(() => selectedRole = value);
-                        }
-                      },
-                    ),
-                    const SizedBox(height: 20),
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton(
-                        onPressed: isLoading ? null : register,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.orange,
-                          padding: const EdgeInsets.symmetric(vertical: 15),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14),
+                        items: const [
+                          DropdownMenuItem(
+                            value: 'owner',
+                            child: Text('Owner'),
                           ),
-                        ),
-                        child: isLoading
-                            ? const SizedBox(
-                                height: 20,
-                                width: 20,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: Colors.white,
-                                ),
-                              )
-                            : const Text("Register"),
+                          DropdownMenuItem(
+                            value: 'rider',
+                            child: Text('Rider'),
+                          ),
+                        ],
+                        onChanged: (value) {
+                          if (value != null) {
+                            setState(() => selectedRole = value);
+                          }
+                        },
                       ),
-                    ),
-                  ],
+                      const SizedBox(height: 20),
+                      AppButton(
+                        text: "Register",
+                        onPressed: register,
+                        isLoading: isLoading,
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

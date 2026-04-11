@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../../core/app_constans.dart';
 import '../../data/services/stock_service.dart';
+import '../widgets/header.dart';
 
 class StockScreen extends StatefulWidget {
   const StockScreen({super.key});
@@ -13,33 +15,75 @@ class _StockScreenState extends State<StockScreen> {
   final StockService _stockService = StockService();
 
   List<Map<String, dynamic>> stockItems = [];
+  List<Map<String, dynamic>> gerobakOptions = [];
+
   bool isLoading = true;
-
-  String selectedGerobakId = 'owner';
-
-  final List<Map<String, String>> gerobakOptions = const [
-    {'id': 'owner', 'name': 'Rumah Owner'},
-    {'id': 'gerobak_1', 'name': 'Gerobak 1'},
-    {'id': 'gerobak_2', 'name': 'Gerobak 2'},
-    {'id': 'gerobak_3', 'name': 'Gerobak 3'},
-  ];
+  String? selectedGerobakId;
+  bool _lowStockPopupShown = false;
 
   @override
   void initState() {
     super.initState();
-    loadStocks();
+    initStockPage();
   }
 
-  Future<void> loadStocks() async {
+  Future<void> initStockPage() async {
     setState(() => isLoading = true);
 
     try {
-      final data = await _stockService.getStocksByGerobak(selectedGerobakId);
+      await _stockService.initializeStocksForAllGerobak(defaultStock: 20);
+
+      final gerobaks = await _stockService.getGerobakOptions();
+
+      if (gerobaks.isEmpty) {
+        setState(() {
+          gerobakOptions = [];
+          selectedGerobakId = null;
+          stockItems = [];
+          isLoading = false;
+        });
+        return;
+      }
+
+      selectedGerobakId ??= gerobaks.first['id']?.toString();
+
+      setState(() {
+        gerobakOptions = gerobaks;
+      });
+
+      await loadStocks(showLowStockPopup: true);
+    } catch (e) {
+      setState(() => isLoading = false);
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Gagal inisialisasi stock: $e")),
+      );
+    }
+  }
+
+  Future<void> loadStocks({bool showLowStockPopup = false}) async {
+    if (selectedGerobakId == null) {
+      setState(() {
+        stockItems = [];
+        isLoading = false;
+      });
+      return;
+    }
+
+    setState(() => isLoading = true);
+
+    try {
+      final data = await _stockService.getStocksByGerobak(selectedGerobakId!);
 
       setState(() {
         stockItems = data;
         isLoading = false;
       });
+
+      if (showLowStockPopup) {
+        _showLowStockWarningIfNeeded();
+      }
     } catch (e) {
       setState(() => isLoading = false);
 
@@ -50,22 +94,72 @@ class _StockScreenState extends State<StockScreen> {
     }
   }
 
+  void _showLowStockWarningIfNeeded() {
+    if (!mounted) return;
+
+    final lowStockItems = stockItems.where((item) {
+      final stock = (item['stock'] ?? 0) as int;
+      return stock < AppConstants.lowStockThreshold;
+    }).toList();
+
+    if (lowStockItems.isEmpty) return;
+    if (_lowStockPopupShown) return;
+
+    _lowStockPopupShown = true;
+
+    final firstNames = lowStockItems.take(2).map((item) {
+      final menu = item['menu'] as Map<String, dynamic>? ?? {};
+      return menu['name']?.toString() ?? '-';
+    }).join(', ');
+
+    final extraCount = lowStockItems.length - 2;
+
+    final message = extraCount > 0
+        ? "Warning: stock menipis untuk $firstNames dan $extraCount item lainnya"
+        : "Warning: stock menipis untuk $firstNames";
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: Text(message),
+            backgroundColor: Colors.red.shade400,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(AppConstants.radiusMedium),
+            ),
+            margin: const EdgeInsets.all(12),
+            duration: const Duration(seconds: 3),
+          ),
+        );
+    });
+  }
+
   Future<void> updateStock({
     required String menuId,
     required int newStock,
   }) async {
+    if (selectedGerobakId == null) return;
+
     try {
       await _stockService.updateStock(
         menuId: menuId,
-        gerobakId: selectedGerobakId,
+        gerobakId: selectedGerobakId!,
         stock: newStock,
       );
 
-      await loadStocks();
+      _lowStockPopupShown = false;
+      await loadStocks(showLowStockPopup: true);
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Stock berhasil diupdate")),
+        const SnackBar(
+          content: Text("Stock berhasil diupdate"),
+          behavior: SnackBarBehavior.floating,
+        ),
       );
     } catch (e) {
       if (!mounted) return;
@@ -108,67 +202,46 @@ class _StockScreenState extends State<StockScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final lowStockCount =
-        stockItems.where((item) => ((item['stock'] ?? 0) as int) < 5).length;
+    final lowStockCount = stockItems.where((item) {
+      return ((item['stock'] ?? 0) as int) < AppConstants.lowStockThreshold;
+    }).length;
 
     return Scaffold(
+      backgroundColor: AppConstants.pageBackground,
       body: isLoading
           ? const Center(child: CircularProgressIndicator())
           : Column(
               children: [
-                Container(
-                  padding: const EdgeInsets.fromLTRB(16, 50, 16, 16),
-                  decoration: const BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [Color(0xFFFF7A1A), Color(0xFFFFA64D)],
+                AppHeader(
+                  subtitle: todayText,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius:
+                          BorderRadius.circular(AppConstants.radiusSmall),
                     ),
-                    borderRadius: BorderRadius.vertical(
-                      bottom: Radius.circular(24),
+                    child: DropdownButton<String>(
+                      isExpanded: true,
+                      underline: const SizedBox(),
+                      value: selectedGerobakId,
+                      items: gerobakOptions.map((item) {
+                        return DropdownMenuItem<String>(
+                          value: item['id']?.toString(),
+                          child: Text(
+                            item['nama_gerobak']?.toString() ?? '-',
+                          ),
+                        );
+                      }).toList(),
+                      onChanged: (value) async {
+                        if (value == null) return;
+                        setState(() {
+                          selectedGerobakId = value;
+                        });
+                        _lowStockPopupShown = false;
+                        await loadStocks(showLowStockPopup: true);
+                      },
                     ),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        "Stock Monitoring",
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        todayText,
-                        style: const TextStyle(color: Colors.white70),
-                      ),
-                      const SizedBox(height: 12),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: DropdownButton<String>(
-                          isExpanded: true,
-                          underline: const SizedBox(),
-                          value: selectedGerobakId,
-                          items: gerobakOptions.map((item) {
-                            return DropdownMenuItem<String>(
-                              value: item['id'],
-                              child: Text(item['name']!),
-                            );
-                          }).toList(),
-                          onChanged: (value) {
-                            if (value == null) return;
-                            setState(() {
-                              selectedGerobakId = value;
-                            });
-                            loadStocks();
-                          },
-                        ),
-                      ),
-                    ],
                   ),
                 ),
                 const SizedBox(height: 12),
@@ -195,30 +268,12 @@ class _StockScreenState extends State<StockScreen> {
                   ),
                 ),
                 const SizedBox(height: 10),
-                if (lowStockCount > 0)
-                  Container(
-                    margin: const EdgeInsets.symmetric(horizontal: 12),
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.red.shade100,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.warning, color: Colors.red),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Text(
-                            "$lowStockCount item stock kurang dari 5. Segera restock.",
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                const SizedBox(height: 10),
                 Expanded(
                   child: RefreshIndicator(
-                    onRefresh: loadStocks,
+                    onRefresh: () async {
+                      _lowStockPopupShown = false;
+                      await loadStocks(showLowStockPopup: true);
+                    },
                     child: ListView.builder(
                       padding: const EdgeInsets.all(12),
                       itemCount: stockItems.length,
@@ -230,23 +285,37 @@ class _StockScreenState extends State<StockScreen> {
                         final String name = menu['name']?.toString() ?? '-';
                         final String emoji = menu['emoji']?.toString() ?? '☕';
                         final int stock = (item['stock'] ?? 0) as int;
-                        final bool isLow = stock < 5;
+                        final bool isLow =
+                            stock < AppConstants.lowStockThreshold;
 
                         return Container(
                           margin: const EdgeInsets.only(bottom: 10),
                           padding: const EdgeInsets.all(12),
                           decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(16),
+                            color: AppConstants.cardBackground,
+                            borderRadius: BorderRadius.circular(
+                              AppConstants.radiusMedium,
+                            ),
                             boxShadow: const [
                               BoxShadow(color: Colors.black12, blurRadius: 6),
                             ],
                           ),
                           child: Row(
                             children: [
-                              Text(
-                                emoji.isEmpty ? "☕" : emoji,
-                                style: const TextStyle(fontSize: 32),
+                              Container(
+                                width: 48,
+                                height: 48,
+                                alignment: Alignment.center,
+                                decoration: BoxDecoration(
+                                  color: AppConstants.primaryColor.withAlpha(18),
+                                  borderRadius: BorderRadius.circular(
+                                    AppConstants.radiusSmall,
+                                  ),
+                                ),
+                                child: Text(
+                                  emoji.isEmpty ? "☕" : emoji,
+                                  style: const TextStyle(fontSize: 26),
+                                ),
                               ),
                               const SizedBox(width: 10),
                               Expanded(
@@ -257,16 +326,31 @@ class _StockScreenState extends State<StockScreen> {
                                       name,
                                       style: const TextStyle(
                                         fontWeight: FontWeight.bold,
+                                        fontSize: 14,
                                       ),
                                     ),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      "$stock units",
-                                      style: TextStyle(
-                                        color: isLow ? Colors.red : Colors.black87,
-                                        fontWeight: isLow
-                                            ? FontWeight.w600
-                                            : FontWeight.normal,
+                                    const SizedBox(height: 6),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 8,
+                                        vertical: 4,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: isLow
+                                            ? Colors.red.withAlpha(18)
+                                            : Colors.grey.shade100,
+                                        borderRadius:
+                                            BorderRadius.circular(999),
+                                      ),
+                                      child: Text(
+                                        "$stock units",
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          color: isLow
+                                              ? Colors.red
+                                              : Colors.black87,
+                                          fontWeight: FontWeight.w600,
+                                        ),
                                       ),
                                     ),
                                   ],
@@ -274,7 +358,14 @@ class _StockScreenState extends State<StockScreen> {
                               ),
                               ElevatedButton(
                                 style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.orange,
+                                  backgroundColor: AppConstants.primaryColor,
+                                  foregroundColor: Colors.white,
+                                  elevation: 0,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(
+                                      AppConstants.radiusSmall,
+                                    ),
+                                  ),
                                 ),
                                 onPressed: menuId.isEmpty
                                     ? null
@@ -308,15 +399,15 @@ class _StockScreenState extends State<StockScreen> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
+        color: AppConstants.cardBackground,
+        borderRadius: BorderRadius.circular(AppConstants.radiusMedium),
         boxShadow: const [
           BoxShadow(color: Colors.black12, blurRadius: 6),
         ],
       ),
       child: Row(
         children: [
-          Icon(icon, size: 26, color: Colors.orange),
+          Icon(icon, size: 26, color: AppConstants.primaryColor),
           const SizedBox(width: 10),
           Expanded(
             child: Column(
@@ -354,8 +445,10 @@ class _StockScreenState extends State<StockScreen> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(
+          top: Radius.circular(AppConstants.radiusXL),
+        ),
       ),
       builder: (context) {
         return Padding(
@@ -390,7 +483,8 @@ class _StockScreenState extends State<StockScreen> {
                   filled: true,
                   fillColor: Colors.grey.shade100,
                   border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius:
+                        BorderRadius.circular(AppConstants.radiusSmall),
                     borderSide: BorderSide.none,
                   ),
                 ),
@@ -404,7 +498,9 @@ class _StockScreenState extends State<StockScreen> {
                       style: OutlinedButton.styleFrom(
                         padding: const EdgeInsets.symmetric(vertical: 14),
                         shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
+                          borderRadius: BorderRadius.circular(
+                            AppConstants.radiusSmall,
+                          ),
                         ),
                       ),
                       child: const Text("Cancel"),
@@ -444,10 +540,13 @@ class _StockScreenState extends State<StockScreen> {
                         );
                       },
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.orange,
+                        backgroundColor: AppConstants.primaryColor,
+                        foregroundColor: Colors.white,
                         padding: const EdgeInsets.symmetric(vertical: 14),
                         shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
+                          borderRadius: BorderRadius.circular(
+                            AppConstants.radiusSmall,
+                          ),
                         ),
                       ),
                       child: const Text("Update Stock"),

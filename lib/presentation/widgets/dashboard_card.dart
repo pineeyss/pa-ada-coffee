@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
+import 'app_card.dart';
 
-class DashboardCard extends StatefulWidget {
+class DashboardCard extends StatelessWidget {
   final IconData icon;
   final String title;
   final String value;
   final Color color;
+  final VoidCallback? onTap;
 
   const DashboardCard({
     super.key,
@@ -12,103 +14,65 @@ class DashboardCard extends StatefulWidget {
     required this.title,
     required this.value,
     required this.color,
+    this.onTap,
   });
 
   @override
-  State<DashboardCard> createState() => _DashboardCardState();
-}
-
-class _DashboardCardState extends State<DashboardCard> {
-  bool isHovered = false;
-  bool isTapped = false;
-
-  void _toggleMobilePopup() {
-    setState(() {
-      isTapped = !isTapped;
-    });
-  }
-
-  @override
   Widget build(BuildContext context) {
-    final showPopup = isHovered || isTapped;
-
-    return MouseRegion(
-      onEnter: (_) => setState(() => isHovered = true),
-      onExit: (_) => setState(() => isHovered = false),
-      child: GestureDetector(
-        onTap: _toggleMobilePopup,
-        child: Stack(
-          clipBehavior: Clip.none,
-          alignment: Alignment.center,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(14),
-                boxShadow: const [
-                  BoxShadow(color: Colors.black12, blurRadius: 4),
-                ],
-              ),
-              child: Center(
-                child: CircleAvatar(
-                  radius: 18,
-                  backgroundColor: widget.color.withOpacity(0.15),
-                  child: Icon(
-                    widget.icon,
-                    color: widget.color,
-                    size: 18,
-                  ),
-                ),
-              ),
+    return AppCard(
+      onTap: onTap,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+      child: Row(
+        children: [
+          Container(
+            width: 42,
+            height: 42,
+            decoration: BoxDecoration(
+              color: color.withAlpha(24),
+              borderRadius: BorderRadius.circular(14),
             ),
-
-            if (showPopup)
-              Positioned(
-                top: -65,
-                child: Material(
-                  color: Colors.transparent,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 8,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(12),
-                      boxShadow: const [
-                        BoxShadow(
-                          color: Colors.black26,
-                          blurRadius: 6,
-                        ),
-                      ],
-                    ),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          widget.title,
-                          style: const TextStyle(
-                            fontSize: 10,
-                            color: Colors.grey,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          widget.value,
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.bold,
-                            color: widget.color,
-                          ),
-                        ),
-                      ],
-                    ),
+            child: Icon(
+              icon,
+              color: color,
+              size: 22,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: Colors.black54,
+                    fontWeight: FontWeight.w500,
                   ),
                 ),
-              ),
-          ],
-        ),
+                const SizedBox(height: 4),
+                Text(
+                  value,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.bold,
+                    color: color,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 6),
+          Icon(
+            Icons.chevron_right_rounded,
+            color: Colors.grey.shade400,
+            size: 20,
+          ),
+        ],
       ),
     );
   }

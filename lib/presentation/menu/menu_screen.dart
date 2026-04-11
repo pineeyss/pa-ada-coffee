@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../data/models/menu_item_model.dart';
 import '../../data/services/menu_service.dart';
+import '../widgets/header.dart';
 
 class MenuScreen extends StatefulWidget {
   const MenuScreen({super.key});
@@ -69,68 +70,67 @@ class _MenuScreenState extends State<MenuScreen> {
     );
   }
 
-  Widget _header() {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(16, 50, 16, 16),
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          colors: [Color(0xFFFF7A1A), Color(0xFFFFA64D)],
-        ),
-        borderRadius: BorderRadius.vertical(bottom: Radius.circular(24)),
-      ),
-      child: Column(
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+Widget _header() {
+  return AppHeader(
+    title: Row(
+      children: [
+        const Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    "Menu Management",
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  Text(
-                    "${menuItems.length} items",
-                    style: const TextStyle(color: Colors.white70),
-                  ),
-                ],
-              ),
-              GestureDetector(
-                onTap: _showAddModal,
-                child: const CircleAvatar(
-                  backgroundColor: Colors.white,
-                  child: Icon(Icons.add, color: Colors.orange),
+              Text(
+                "Menu Management",
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
                 ),
-              )
+              ),
+              SizedBox(height: 6),
+              Text(
+                "Manage your coffee menu",
+                style: TextStyle(
+                  color: Colors.white70,
+                  fontSize: 14,
+                ),
+              ),
             ],
           ),
-          const SizedBox(height: 12),
-          TextField(
-            onChanged: (value) {
-              setState(() {
-                searchQuery = value;
-              });
-            },
-            decoration: InputDecoration(
-              hintText: "Search menu items...",
-              filled: true,
-              fillColor: Colors.white,
-              prefixIcon: const Icon(Icons.search),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide.none,
-              ),
+        ),
+        GestureDetector(
+          onTap: _showAddModal,
+          child: const CircleAvatar(
+            radius: 22,
+            backgroundColor: Colors.white,
+            child: Icon(
+              Icons.add,
+              color: Colors.orange,
+              size: 28,
             ),
           ),
-        ],
+        ),
+      ],
+    ),
+    subtitle: "${menuItems.length} items",
+    child: TextField(
+      onChanged: (value) {
+        setState(() {
+          searchQuery = value;
+        });
+      },
+      decoration: InputDecoration(
+        hintText: "Search menu items...",
+        filled: true,
+        fillColor: Colors.white,
+        prefixIcon: const Icon(Icons.search),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide.none,
+        ),
       ),
-    );
-  }
+    ),
+  );
+}
 
   Widget _categoryFilter() {
     final cats = ["All", "Coffee", "Signature", "Premium", "Non Coffee"];
@@ -278,7 +278,6 @@ class _MenuScreenState extends State<MenuScreen> {
                         ),
                       ),
                       const SizedBox(height: 16),
-
                       const Text(
                         "Item Name",
                         style: TextStyle(fontSize: 12, color: Colors.grey),
@@ -294,9 +293,7 @@ class _MenuScreenState extends State<MenuScreen> {
                           return null;
                         },
                       ),
-
                       const SizedBox(height: 14),
-
                       const Text(
                         "Category",
                         style: TextStyle(fontSize: 12, color: Colors.grey),
@@ -337,9 +334,7 @@ class _MenuScreenState extends State<MenuScreen> {
                           },
                         ),
                       ),
-
                       const SizedBox(height: 14),
-
                       Row(
                         children: [
                           Expanded(
@@ -427,9 +422,7 @@ class _MenuScreenState extends State<MenuScreen> {
                           ),
                         ],
                       ),
-
                       const SizedBox(height: 14),
-
                       const Text(
                         "Emoji Icon",
                         style: TextStyle(fontSize: 12, color: Colors.grey),
@@ -439,9 +432,7 @@ class _MenuScreenState extends State<MenuScreen> {
                         controller: emoji,
                         decoration: _inputStyle("☕"),
                       ),
-
                       const SizedBox(height: 20),
-
                       Row(
                         children: [
                           Expanded(
@@ -476,11 +467,9 @@ class _MenuScreenState extends State<MenuScreen> {
                                   await _menuService.addMenu(
                                     MenuItemModel(
                                       name: name.text.trim(),
-                                      price:
-                                          int.parse(price.text.trim()),
+                                      price: int.parse(price.text.trim()),
                                       category: category,
-                                      stock:
-                                          int.parse(stock.text.trim()),
+                                      stock: int.parse(stock.text.trim()),
                                       emoji: emoji.text.trim(),
                                     ),
                                   );
@@ -571,7 +560,6 @@ class _MenuScreenState extends State<MenuScreen> {
                         ),
                       ),
                       const SizedBox(height: 16),
-
                       const Text(
                         "Item Name",
                         style: TextStyle(fontSize: 12, color: Colors.grey),
@@ -579,7 +567,7 @@ class _MenuScreenState extends State<MenuScreen> {
                       const SizedBox(height: 6),
                       TextFormField(
                         controller: name,
-                        decoration: _inputStyle("e.g., Americano"),
+                        decoration: _inputStyle("e.g. Americano"),
                         validator: (value) {
                           if ((value ?? '').trim().isEmpty) {
                             return 'Nama menu wajib diisi';
@@ -587,9 +575,7 @@ class _MenuScreenState extends State<MenuScreen> {
                           return null;
                         },
                       ),
-
                       const SizedBox(height: 14),
-
                       const Text(
                         "Category",
                         style: TextStyle(fontSize: 12, color: Colors.grey),
@@ -630,9 +616,7 @@ class _MenuScreenState extends State<MenuScreen> {
                           },
                         ),
                       ),
-
                       const SizedBox(height: 14),
-
                       Row(
                         children: [
                           Expanded(
@@ -720,9 +704,7 @@ class _MenuScreenState extends State<MenuScreen> {
                           ),
                         ],
                       ),
-
                       const SizedBox(height: 14),
-
                       const Text(
                         "Emoji Icon",
                         style: TextStyle(fontSize: 12, color: Colors.grey),
@@ -732,9 +714,7 @@ class _MenuScreenState extends State<MenuScreen> {
                         controller: emoji,
                         decoration: _inputStyle("☕"),
                       ),
-
                       const SizedBox(height: 20),
-
                       Row(
                         children: [
                           Expanded(
@@ -771,11 +751,9 @@ class _MenuScreenState extends State<MenuScreen> {
                                     MenuItemModel(
                                       id: item.id,
                                       name: name.text.trim(),
-                                      price:
-                                          int.parse(price.text.trim()),
+                                      price: int.parse(price.text.trim()),
                                       category: category,
-                                      stock:
-                                          int.parse(stock.text.trim()),
+                                      stock: int.parse(stock.text.trim()),
                                       emoji: emoji.text.trim(),
                                       createdAt: item.createdAt,
                                     ),

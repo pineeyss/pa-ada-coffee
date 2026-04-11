@@ -3,6 +3,10 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../widgets/header.dart';
 import '../widgets/dashboard_card.dart';
 import '../../data/services/report_service.dart';
+import '../sales/sales_screen.dart';
+import '../reports/reports_screen.dart';
+import '../../utils/currency_formatter.dart';
+import '../widgets/empty_state.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -112,7 +116,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   String formatRupiah(int value) {
-    return "Rp $value";
+    return CurrencyFormatter.format(value);
   }
 
   String _getTodayText() {
@@ -144,6 +148,24 @@ class _HomeScreenState extends State<HomeScreen> {
     ];
 
     return "${days[now.weekday - 1]}, ${now.day} ${months[now.month - 1]} ${now.year}";
+  }
+
+  void _openSalesScreen() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => const SalesScreen(),
+      ),
+    );
+  }
+
+  void _openReportsScreen() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => const ReportsScreen(),
+      ),
+    );
   }
 
   @override
@@ -182,7 +204,10 @@ class _HomeScreenState extends State<HomeScreen> {
       child: Column(
         children: [
           AppHeader(
-            title: "AD.A Coffee",
+            title: Image.asset(
+              'lib/assets/images/logo.png',
+              width: 160,
+            ),
             subtitle: _getTodayText(),
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -213,177 +238,227 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-            child: Column(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            child: Row(
               children: [
-                SizedBox(
-                  height: 75,
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: DashboardCard(
-                          icon: Icons.attach_money,
-                          title: "Sales",
-                          value: formatRupiah(totalRevenue),
-                          color: Colors.orange,
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: DashboardCard(
-                          icon: Icons.receipt,
-                          title: "Orders",
-                          value: "$totalOrders",
-                          color: Colors.amber,
-                        ),
-                      ),
-                    ],
+                Expanded(
+                  child: DashboardCard(
+                    icon: Icons.attach_money_rounded,
+                    title: "Sales",
+                    value: formatRupiah(totalRevenue),
+                    color: Colors.orange,
+                    onTap: _openSalesScreen,
                   ),
                 ),
-                const SizedBox(height: 16),
-                const Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    "Best Selling Today",
+                const SizedBox(width: 10),
+                Expanded(
+                  child: DashboardCard(
+                    icon: Icons.receipt_long_rounded,
+                    title: "Orders",
+                    value: "$totalOrders",
+                    color: Colors.amber,
+                    onTap: _openReportsScreen,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(18),
+                boxShadow: const [
+                  BoxShadow(color: Colors.black12, blurRadius: 6),
+                ],
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    "Top Selling Items",
                     style: TextStyle(
                       fontWeight: FontWeight.bold,
-                      fontSize: 18,
+                      fontSize: 15,
                     ),
                   ),
-                ),
-                const SizedBox(height: 10),
-                if (topSellingItems.isEmpty)
-                  const Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text("Belum ada data penjualan"),
-                  )
-                else
-                  ...topSellingItems.take(4).map((item) {
-                    return _buildBestItem(
-                      item['name'] ?? '-',
-                      "${item['qty'] ?? 0} sold",
-                      formatRupiah((item['revenue'] ?? 0) as int),
-                    );
-                  }),
-                const SizedBox(height: 16),
-                const Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text(
+                  const SizedBox(height: 12),
+                  if (topSellingItems.isEmpty)
+                    const EmptyState(
+                      icon: Icons.local_fire_department_outlined,
+                      title: "Belum ada data penjualan",
+                      subtitle: "Menu terlaris akan muncul di sini setelah ada transaksi.",
+                    )
+                  else
+                    ...topSellingItems.take(3).toList().asMap().entries.map((entry) {
+                      final index = entry.key;
+                      final item = entry.value;
+
+                      final itemName = item['name']?.toString() ?? '-';
+                      final qty = (item['qty'] ?? 0) as int;
+                      final revenue = (item['revenue'] ?? 0) as int;
+
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 10),
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.orange.withAlpha(15),
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        child: Row(
+                          children: [
+                            Container(
+                              width: 28,
+                              height: 28,
+                              alignment: Alignment.center,
+                              decoration: BoxDecoration(
+                                color: Colors.orange,
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Text(
+                                "${index + 1}",
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Text(
+                                itemName,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                Text(
+                                  "$qty sold",
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.black54,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  formatRupiah(revenue),
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.orange,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      );
+                    }),
+                ],
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(18),
+                boxShadow: const [
+                  BoxShadow(color: Colors.black12, blurRadius: 6),
+                ],
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
                     "Recent Sales",
                     style: TextStyle(
                       fontWeight: FontWeight.bold,
-                      fontSize: 18,
+                      fontSize: 15,
                     ),
                   ),
-                ),
-                const SizedBox(height: 10),
-                if (recentSales.isEmpty)
-                  const Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text("Belum ada transaksi terbaru"),
-                  )
-                else
-                  ...recentSales.take(4).map((item) {
-                    return _buildRecentItem(
-                      item['name'] ?? '-',
-                      item['location'] ?? 'Unknown',
-                      formatRupiah((item['price'] ?? 0) as int),
-                      item['time'] ?? '-',
-                    );
-                  }),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
+                  const SizedBox(height: 12),
+                  if (recentSales.isEmpty)
+                    const EmptyState(
+                      icon: Icons.shopping_bag_outlined,
+                      title: "Belum ada transaksi terbaru",
+                      subtitle: "Transaksi terbaru akan tampil di sini setelah penjualan berjalan.",
+                    )
+                  else
+                    ...recentSales.take(5).map((sale) {
+                      final menuName = sale['menu_name']?.toString() ?? '-';
+                      final qty = (sale['qty'] ?? 0) as int;
+                      final total = (sale['total_harga'] ?? 0) as int;
 
-  Widget _buildBestItem(String name, String sold, String price) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: const [
-          BoxShadow(color: Colors.black12, blurRadius: 6),
-        ],
-      ),
-      child: Row(
-        children: [
-          const Icon(Icons.local_cafe, size: 34),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  name,
-                  style: const TextStyle(fontWeight: FontWeight.bold),
-                ),
-                Text(
-                  sold,
-                  style: const TextStyle(fontSize: 12),
-                ),
-              ],
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 10),
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade50,
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        child: Row(
+                          children: [
+                            Container(
+                              width: 38,
+                              height: 38,
+                              decoration: BoxDecoration(
+                                color: Colors.orange.withOpacity(0.12),
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: const Icon(
+                                Icons.shopping_bag_outlined,
+                                color: Colors.orange,
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    menuName,
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    "$qty item",
+                                    style: const TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.black54,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Text(
+                              formatRupiah(total),
+                              style: const TextStyle(
+                                color: Colors.orange,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    }),
+                ],
+              ),
             ),
           ),
-          Text(
-            price,
-            style: const TextStyle(color: Colors.orange),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildRecentItem(
-    String name,
-    String location,
-    String price,
-    String time,
-  ) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: const [
-          BoxShadow(color: Colors.black12, blurRadius: 6),
-        ],
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  name,
-                  style: const TextStyle(fontWeight: FontWeight.bold),
-                ),
-                Text(
-                  location,
-                  style: const TextStyle(fontSize: 12),
-                ),
-              ],
-            ),
-          ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(
-                price,
-                style: const TextStyle(color: Colors.orange),
-              ),
-              Text(
-                time,
-                style: const TextStyle(fontSize: 10),
-              ),
-            ],
-          ),
+          const SizedBox(height: 20),
         ],
       ),
     );

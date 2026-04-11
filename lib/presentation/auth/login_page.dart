@@ -3,6 +3,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../home/main_navigation.dart';
 import '../rider/rider_navigation.dart';
 import 'register_page.dart';
+import '../widgets/app_button.dart';
+import '../widgets/header.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -110,10 +112,7 @@ class _LoginPageState extends State<LoginPage> {
       'Desember',
     ];
 
-    final dayName = days[now.weekday - 1];
-    final monthName = months[now.month - 1];
-
-    return "$dayName, ${now.day} $monthName ${now.year}";
+    return "${days[now.weekday - 1]}, ${now.day} ${months[now.month - 1]} ${now.year}";
   }
 
   InputDecoration inputStyle({
@@ -123,14 +122,26 @@ class _LoginPageState extends State<LoginPage> {
   }) {
     return InputDecoration(
       hintText: hint,
-      prefixIcon: prefix != null ? Icon(prefix) : null,
+      hintStyle: TextStyle(
+        color: Colors.grey.shade500,
+        fontSize: 15,
+      ),
+      prefixIcon: prefix != null ? Icon(prefix, color: Colors.grey.shade600) : null,
       suffixIcon: suffix,
       filled: true,
-      fillColor: Colors.grey.shade100,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+      fillColor: const Color(0xFFF7F7F7),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 16),
       border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(16),
         borderSide: BorderSide.none,
+      ),
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(16),
+        borderSide: BorderSide(color: Colors.grey.shade200),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(16),
+        borderSide: const BorderSide(color: Colors.orange, width: 1.2),
       ),
     );
   }
@@ -145,123 +156,115 @@ class _LoginPageState extends State<LoginPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF6F6F6),
-      body: SingleChildScrollView(
-        child: Column(
-          children: [
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.fromLTRB(20, 70, 20, 28),
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [Color(0xFFFF7A1A), Color(0xFFFFA64D)],
-                ),
-                borderRadius: BorderRadius.vertical(
-                  bottom: Radius.circular(30),
-                ),
+      backgroundColor: const Color(0xFFF8F5F2),
+      body: SafeArea(
+        child: SingleChildScrollView(
+          child: Column(
+            children: [
+              AppHeader(
+                subtitle: _getTodayText(),
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    "Selamat Datang",
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 26,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text(
-                    _getTodayText(),
-                    style: const TextStyle(color: Colors.white70),
-                  ),
-                ],
-              ),
-            ),
-            Transform.translate(
-              offset: const Offset(0, -12),
-              child: Container(
-                margin: const EdgeInsets.symmetric(horizontal: 16),
-                padding: const EdgeInsets.all(18),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(22),
-                  boxShadow: const [
-                    BoxShadow(color: Colors.black12, blurRadius: 10),
-                  ],
-                ),
-                child: Column(
-                  children: [
-                    TextField(
-                      controller: emailController,
-                      decoration: inputStyle(
-                        hint: "Masukkan email",
-                        prefix: Icons.email_outlined,
+              Transform.translate(
+                offset: const Offset(0, -16),
+                child: Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 16),
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(24),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withAlpha(18),
+                        blurRadius: 18,
+                        offset: const Offset(0, 8),
                       ),
-                    ),
-                    const SizedBox(height: 14),
-                    TextField(
-                      controller: passwordController,
-                      obscureText: obscurePassword,
-                      decoration: inputStyle(
-                        hint: "Masukkan password",
-                        prefix: Icons.lock_outline,
-                        suffix: IconButton(
+                    ],
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        "Login Account",
+                        style: TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.black87,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        "Masuk untuk lanjut ke dashboard",
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: Colors.grey.shade600,
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                      TextField(
+                        controller: emailController,
+                        keyboardType: TextInputType.emailAddress,
+                        decoration: inputStyle(
+                          hint: "Masukkan email",
+                          prefix: Icons.email_outlined,
+                        ),
+                      ),
+                      const SizedBox(height: 14),
+                      TextField(
+                        controller: passwordController,
+                        obscureText: obscurePassword,
+                        decoration: inputStyle(
+                          hint: "Masukkan password",
+                          prefix: Icons.lock_outline,
+                          suffix: IconButton(
+                            onPressed: () {
+                              setState(() {
+                                obscurePassword = !obscurePassword;
+                              });
+                            },
+                            icon: Icon(
+                              obscurePassword
+                                  ? Icons.visibility_off_outlined
+                                  : Icons.visibility_outlined,
+                              color: Colors.grey.shade600,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                      AppButton(
+                        text: "Login",
+                        onPressed: login,
+                        isLoading: isLoading,
+                      ),
+                      const SizedBox(height: 14),
+                      Center(
+                        child: TextButton(
                           onPressed: () {
-                            setState(() {
-                              obscurePassword = !obscurePassword;
-                            });
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => const RegisterPage(),
+                              ),
+                            );
                           },
-                          icon: Icon(
-                            obscurePassword
-                                ? Icons.visibility_off
-                                : Icons.visibility,
+                          style: TextButton.styleFrom(
+                            foregroundColor: Colors.orange,
+                          ),
+                          child: const Text(
+                            "Belum punya akun? Register",
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                    const SizedBox(height: 20),
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton(
-                        onPressed: isLoading ? null : login,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.orange,
-                          padding: const EdgeInsets.symmetric(vertical: 15),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                        ),
-                        child: isLoading
-                            ? const SizedBox(
-                                height: 20,
-                                width: 20,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: Colors.white,
-                                ),
-                              )
-                            : const Text("Login"),
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    TextButton(
-                      onPressed: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => const RegisterPage(),
-                          ),
-                        );
-                      },
-                      child: const Text("Belum punya akun? Register"),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

@@ -1,7 +1,9 @@
-import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../data/services/report_service.dart';
+import '../../utils/currency_formatter.dart';
+import '../widgets/empty_state.dart';
+import '../widgets/header.dart';
 
 class ReportsScreen extends StatefulWidget {
   const ReportsScreen({super.key});
@@ -14,19 +16,18 @@ class _ReportsScreenState extends State<ReportsScreen> {
   final ReportService _reportService = ReportService();
   final SupabaseClient supabase = Supabase.instance.client;
 
-  String selectedFilter = "Daily";
-  final List<String> filters = ["Daily", "Weekly"];
-
-  String? selectedGerobakId;
-  List<Map<String, dynamic>> gerobakOptions = [];
-
   bool isLoading = true;
+  String? errorMessage;
+
   int totalRevenue = 0;
   int totalOrders = 0;
-  List<Map<String, dynamic>> topSellingItems = [];
-  List<FlSpot> salesTrend = [];
+  int averageOrderValue = 0;
 
-  int get selectedDays => selectedFilter == "Daily" ? 1 : 7;
+  List<Map<String, dynamic>> topSellingItems = [];
+  List<Map<String, dynamic>> recentSales = [];
+  List<Map<String, dynamic>> gerobakOptions = [];
+
+  String? selectedGerobakId;
 
   @override
   void initState() {
@@ -36,7 +37,10 @@ class _ReportsScreenState extends State<ReportsScreen> {
 
   Future<void> initReports() async {
     try {
-      setState(() => isLoading = true);
+      setState(() {
+        isLoading = true;
+        errorMessage = null;
+      });
 
       final data = await supabase
           .from('gerobak')
@@ -45,377 +49,515 @@ class _ReportsScreenState extends State<ReportsScreen> {
 
       gerobakOptions = List<Map<String, dynamic>>.from(data);
 
-      if (gerobakOptions.isNotEmpty) {
-        selectedGerobakId = gerobakOptions.first['id']?.toString();
+      if (gerobakOptions.isEmpty) {
+        setState(() {
+          isLoading = false;
+          errorMessage = 'Data gerobak kosong';
+        });
+        return;
       }
+
+      selectedGerobakId = gerobakOptions.first['id']?.toString();
 
       await loadReports();
     } catch (e) {
-      setState(() => isLoading = false);
-
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Gagal load gerobak: $e")),
-      );
+      setState(() {
+        isLoading = false;
+        errorMessage = 'Gagal load gerobak: $e';
+      });
     }
   }
 
   Future<void> loadReports() async {
     if (selectedGerobakId == null) {
-      setState(() => isLoading = false);
+      setState(() {
+        isLoading = false;
+        errorMessage = 'Gerobak belum dipilih';
+      });
       return;
     }
 
     try {
-      setState(() => isLoading = true);
+      setState(() {
+        isLoading = true;
+        errorMessage = null;
+      });
 
       final revenue = await _reportService.getTotalRevenue(
         gerobakId: selectedGerobakId,
-        days: selectedDays,
       );
 
       final orders = await _reportService.getTotalOrders(
         gerobakId: selectedGerobakId,
-        days: selectedDays,
       );
 
       final topItems = await _reportService.getTopSellingItems(
         gerobakId: selectedGerobakId,
-        days: selectedDays,
       );
 
-      final trend = await _reportService.getSalesTrend(
+      final recent = await _reportService.getRecentSales(
         gerobakId: selectedGerobakId,
-        days: selectedDays,
       );
 
       setState(() {
         totalRevenue = revenue;
         totalOrders = orders;
+        averageOrderValue = orders > 0 ? (revenue / orders).round() : 0;
         topSellingItems = topItems;
-        salesTrend = trend;
+        recentSales = recent;
         isLoading = false;
       });
     } catch (e) {
-      setState(() => isLoading = false);
-
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Gagal load report: $e")),
-      );
+      setState(() {
+        isLoading = false;
+        errorMessage = 'Gagal load reports: $e';
+      });
     }
   }
 
   String formatRupiah(int value) {
-    return "Rp $value";
+    return CurrencyFormatter.format(value);
+  }
+
+  String get todayText {
+    final now = DateTime.now();
+
+    const days = [
+      'Senin',
+      'Selasa',
+      'Rabu',
+      'Kamis',
+      'Jumat',
+      'Sabtu',
+      'Minggu',
+    ];
+
+    const months = [
+      'Januari',
+      'Februari',
+      'Maret',
+      'April',
+      'Mei',
+      'Juni',
+      'Juli',
+      'Agustus',
+      'September',
+      'Oktober',
+      'November',
+      'Desember',
+    ];
+
+    return '${days[now.weekday - 1]}, ${now.day} ${months[now.month - 1]} ${now.year}';
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: const Color(0xFFF8F5F2),
       body: isLoading
           ? const Center(child: CircularProgressIndicator())
-          : SingleChildScrollView(
-              child: Column(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.fromLTRB(16, 50, 16, 16),
-                    decoration: const BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [Color(0xFFFF7A1A), Color(0xFFFFA64D)],
-                      ),
-                      borderRadius: BorderRadius.vertical(
-                        bottom: Radius.circular(24),
-                      ),
-                    ),
+          : errorMessage != null
+              ? Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
                     child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        const Text(
-                          "Reports & Analytics",
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        const SizedBox(height: 6),
-                        Text(
-                          _reportService.getRangeLabel(selectedDays),
-                          style: const TextStyle(color: Colors.white70),
+                        const Icon(
+                          Icons.error_outline,
+                          size: 48,
+                          color: Colors.red,
                         ),
                         const SizedBox(height: 12),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: DropdownButton<String>(
-                            value: selectedGerobakId,
-                            isExpanded: true,
-                            underline: const SizedBox(),
-                            hint: const Text("Pilih Gerobak"),
-                            items: gerobakOptions.map((item) {
-                              return DropdownMenuItem<String>(
-                                value: item['id']?.toString(),
-                                child: Text(
-                                  item['nama_gerobak']?.toString() ?? '-',
-                                ),
-                              );
-                            }).toList(),
-                            onChanged: (value) async {
-                              if (value == null) return;
-
-                              setState(() {
-                                selectedGerobakId = value;
-                              });
-
-                              await loadReports();
-                            },
-                          ),
+                        Text(
+                          errorMessage!,
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 16),
+                        ElevatedButton(
+                          onPressed: initReports,
+                          child: const Text('Coba Lagi'),
                         ),
                       ],
                     ),
                   ),
+                )
+              : RefreshIndicator(
+                  onRefresh: loadReports,
+                  child: SingleChildScrollView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    child: Column(
+                      children: [
+                        AppHeader(
+                          subtitle: todayText,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 12),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: DropdownButton<String>(
+                              isExpanded: true,
+                              underline: const SizedBox(),
+                              value: selectedGerobakId,
+                              items: gerobakOptions.map((item) {
+                                return DropdownMenuItem<String>(
+                                  value: item['id']?.toString(),
+                                  child: Text(
+                                    item['nama_gerobak']?.toString() ?? '-',
+                                  ),
+                                );
+                              }).toList(),
+                              onChanged: (value) async {
+                                if (value == null) return;
 
-                  const SizedBox(height: 10),
+                                setState(() {
+                                  selectedGerobakId = value;
+                                });
 
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: filters.map((f) {
-                      final isActive = selectedFilter == f;
-
-                      return GestureDetector(
-                        onTap: () async {
-                          setState(() => selectedFilter = f);
-                          await loadReports();
-                        },
-                        child: Container(
-                          margin: const EdgeInsets.symmetric(horizontal: 6),
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 8,
-                          ),
-                          decoration: BoxDecoration(
-                            color: isActive ? Colors.orange : Colors.white,
-                            borderRadius: BorderRadius.circular(20),
-                            boxShadow: const [
-                              BoxShadow(
-                                color: Colors.black12,
-                                blurRadius: 4,
-                              ),
-                            ],
-                          ),
-                          child: Text(
-                            f,
-                            style: TextStyle(
-                              color: isActive ? Colors.white : Colors.black,
+                                await loadReports();
+                              },
                             ),
                           ),
                         ),
-                      );
-                    }).toList(),
-                  ),
-
-                  const SizedBox(height: 10),
-
-                  Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: Column(
-                      children: [
-                        _buildStatCard(
-                          Icons.attach_money,
-                          "Total Revenue",
-                          formatRupiah(totalRevenue),
-                        ),
-                        _buildStatCard(
-                          Icons.receipt,
-                          "Total Orders",
-                          "$totalOrders",
-                        ),
-                        _buildStatCard(
-                          Icons.show_chart,
-                          "Avg Order Value",
-                          totalOrders == 0
-                              ? "Rp 0"
-                              : formatRupiah(totalRevenue ~/ totalOrders),
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(16),
-                        boxShadow: const [
-                          BoxShadow(color: Colors.black12, blurRadius: 6),
-                        ],
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            selectedFilter == "Daily"
-                                ? "Sales Trend Today"
-                                : "Sales Trend This Week",
-                            style: const TextStyle(fontWeight: FontWeight.bold),
+                        const SizedBox(height: 12),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: _buildSummaryCard(
+                                  icon: Icons.payments_outlined,
+                                  title: "Total Revenue",
+                                  value: formatRupiah(totalRevenue),
+                                  iconBg: Colors.orange.withAlpha(20),
+                                  iconColor: Colors.orange,
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: _buildSummaryCard(
+                                  icon: Icons.receipt_long_outlined,
+                                  title: "Total Orders",
+                                  value: "$totalOrders",
+                                  iconBg: Colors.amber.withAlpha(20),
+                                  iconColor: Colors.amber.shade700,
+                                ),
+                              ),
+                            ],
                           ),
-                          const SizedBox(height: 20),
-                          SizedBox(
-                            height: 220,
-                            child: salesTrend.isEmpty
-                                ? const Center(
-                                    child: Text("Belum ada data grafik"),
-                                  )
-                                : LineChart(
-                                    LineChartData(
-                                      gridData: FlGridData(show: true),
-                                      borderData: FlBorderData(show: false),
-                                      titlesData: FlTitlesData(
-                                        leftTitles: AxisTitles(
-                                          sideTitles: SideTitles(
-                                            showTitles: true,
-                                            reservedSize: 42,
-                                            getTitlesWidget: (value, meta) {
-                                              if (value == 0) {
-                                                return const Text(
-                                                  '0',
-                                                  style: TextStyle(fontSize: 10),
-                                                );
-                                              }
-
-                                              return Text(
-                                                '${(value / 1000).toStringAsFixed(0)}k',
-                                                style: const TextStyle(fontSize: 10),
-                                              );
-                                            },
-                                          ),
-                                        ),
-                                        rightTitles: const AxisTitles(
-                                          sideTitles: SideTitles(showTitles: false),
-                                        ),
-                                        topTitles: const AxisTitles(
-                                          sideTitles: SideTitles(showTitles: false),
-                                        ),
-                                        bottomTitles: AxisTitles(
-                                          sideTitles: SideTitles(
-                                            showTitles: true,
-                                            getTitlesWidget: (value, meta) {
-                                              return Padding(
-                                                padding: const EdgeInsets.only(top: 6),
-                                                child: Text(
-                                                  _reportService.getTrendBottomLabel(
-                                                    value,
-                                                    selectedDays,
-                                                  ),
-                                                  style: const TextStyle(fontSize: 10),
-                                                ),
-                                              );
-                                            },
-                                          ),
-                                        ),
-                                      ),
-                                      lineBarsData: [
-                                        LineChartBarData(
-                                          isCurved: true,
-                                          spots: salesTrend,
-                                          dotData: FlDotData(show: true),
-                                          barWidth: 3,
-                                          belowBarData: BarAreaData(show: false),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          selectedFilter == "Daily"
-                              ? "Top Selling Items Today"
-                              : "Top Selling Items This Week",
-                          style: const TextStyle(fontWeight: FontWeight.bold),
                         ),
                         const SizedBox(height: 10),
-                        if (topSellingItems.isEmpty)
-                          const Text("Belum ada data penjualan")
-                        else
-                          ...topSellingItems.asMap().entries.map((entry) {
-                            final index = entry.key;
-                            final item = entry.value;
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          child: _buildSummaryCard(
+                            icon: Icons.analytics_outlined,
+                            title: "Avg Order Value",
+                            value: formatRupiah(averageOrderValue),
+                            iconBg: Colors.brown.withAlpha(18),
+                            iconColor: Colors.brown,
+                            fullWidth: true,
+                          ),
+                        ),
+                        const SizedBox(height: 14),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          child: _buildSectionCard(
+                            title: "Daily Overview",
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: _buildMiniStat(
+                                    label: "Revenue",
+                                    value: formatRupiah(totalRevenue),
+                                    color: Colors.orange,
+                                  ),
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: _buildMiniStat(
+                                    label: "Orders",
+                                    value: "$totalOrders",
+                                    color: Colors.amber.shade700,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          child: _buildSectionCard(
+                            title: "Weekly Snapshot",
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: _buildMiniStat(
+                                    label: "Top Items",
+                                    value: "${topSellingItems.length}",
+                                    color: Colors.brown,
+                                  ),
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: _buildMiniStat(
+                                    label: "Recent Sales",
+                                    value: "${recentSales.length}",
+                                    color: Colors.deepOrange,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          child: _buildSectionCard(
+                            title: "Top Selling Items",
+                            child: topSellingItems.isEmpty
+                                ? const EmptyState(
+                                    icon: Icons.local_cafe_outlined,
+                                    title: "Belum ada data penjualan",
+                                    subtitle:
+                                        "Data top selling item akan muncul setelah transaksi masuk.",
+                                  )
+                                : Column(
+                                    children: topSellingItems
+                                        .take(5)
+                                        .toList()
+                                        .asMap()
+                                        .entries
+                                        .map((entry) {
+                                      final index = entry.key;
+                                      final item = entry.value;
 
-                            final qty = (item['qty'] ?? 0) as int;
-                            final revenue = (item['revenue'] ?? 0) as int;
-                            final maxQty =
-                                (topSellingItems.first['qty'] ?? 1) as int;
-                            final progress = maxQty == 0
-                                ? 0.0
-                                : (qty / maxQty).clamp(0.0, 1.0);
+                                      final itemName =
+                                          item['name']?.toString() ?? '-';
+                                      final qty = (item['qty'] ?? 0) as int;
+                                      final revenue =
+                                          (item['revenue'] ?? 0) as int;
 
-                            return _buildTopItem(
-                              "${index + 1}",
-                              item['name'] ?? '-',
-                              formatRupiah(revenue),
-                              "$qty sold",
-                              progress.toDouble(),
-                            );
-                          }),
+                                      return Container(
+                                        margin:
+                                            const EdgeInsets.only(bottom: 10),
+                                        padding: const EdgeInsets.all(12),
+                                        decoration: BoxDecoration(
+                                          color: Colors.orange.withAlpha(12),
+                                          borderRadius:
+                                              BorderRadius.circular(14),
+                                        ),
+                                        child: Row(
+                                          children: [
+                                            Container(
+                                              width: 28,
+                                              height: 28,
+                                              alignment: Alignment.center,
+                                              decoration: BoxDecoration(
+                                                color: Colors.orange,
+                                                borderRadius:
+                                                    BorderRadius.circular(10),
+                                              ),
+                                              child: Text(
+                                                "${index + 1}",
+                                                style: const TextStyle(
+                                                  color: Colors.white,
+                                                  fontWeight: FontWeight.bold,
+                                                  fontSize: 12,
+                                                ),
+                                              ),
+                                            ),
+                                            const SizedBox(width: 10),
+                                            Expanded(
+                                              child: Text(
+                                                itemName,
+                                                style: const TextStyle(
+                                                  fontWeight: FontWeight.w600,
+                                                ),
+                                              ),
+                                            ),
+                                            Column(
+                                              crossAxisAlignment:
+                                                  CrossAxisAlignment.end,
+                                              children: [
+                                                Text(
+                                                  "$qty sold",
+                                                  style: const TextStyle(
+                                                    fontSize: 12,
+                                                    color: Colors.black54,
+                                                  ),
+                                                ),
+                                                const SizedBox(height: 2),
+                                                Text(
+                                                  formatRupiah(revenue),
+                                                  style: const TextStyle(
+                                                    fontSize: 12,
+                                                    color: Colors.orange,
+                                                    fontWeight: FontWeight.bold,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ],
+                                        ),
+                                      );
+                                    }).toList(),
+                                  ),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          child: _buildSectionCard(
+                            title: "Recent Sales",
+                            child: recentSales.isEmpty
+                                ? const EmptyState(
+                                    icon: Icons.receipt_long_outlined,
+                                    title: "Belum ada transaksi terbaru",
+                                    subtitle:
+                                        "Riwayat transaksi akan tampil di sini setelah ada penjualan.",
+                                  )
+                                : Column(
+                                    children: recentSales.take(6).map((sale) {
+                                      final menuName =
+                                          sale['menu_name']?.toString() ?? '-';
+                                      final qty = (sale['qty'] ?? 0) as int;
+                                      final total =
+                                          (sale['total_harga'] ?? 0) as int;
+
+                                      return Container(
+                                        margin:
+                                            const EdgeInsets.only(bottom: 10),
+                                        padding: const EdgeInsets.all(12),
+                                        decoration: BoxDecoration(
+                                          color: Colors.grey.shade50,
+                                          borderRadius:
+                                              BorderRadius.circular(14),
+                                        ),
+                                        child: Row(
+                                          children: [
+                                            Container(
+                                              width: 38,
+                                              height: 38,
+                                              decoration: BoxDecoration(
+                                                color: Colors.orange
+                                                    .withAlpha(16),
+                                                borderRadius:
+                                                    BorderRadius.circular(12),
+                                              ),
+                                              child: const Icon(
+                                                Icons.shopping_bag_outlined,
+                                                color: Colors.orange,
+                                              ),
+                                            ),
+                                            const SizedBox(width: 10),
+                                            Expanded(
+                                              child: Column(
+                                                crossAxisAlignment:
+                                                    CrossAxisAlignment.start,
+                                                children: [
+                                                  Text(
+                                                    menuName,
+                                                    style: const TextStyle(
+                                                      fontWeight:
+                                                          FontWeight.w600,
+                                                    ),
+                                                  ),
+                                                  const SizedBox(height: 2),
+                                                  Text(
+                                                    "$qty item",
+                                                    style: const TextStyle(
+                                                      fontSize: 12,
+                                                      color: Colors.black54,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                            Text(
+                                              formatRupiah(total),
+                                              style: const TextStyle(
+                                                color: Colors.orange,
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      );
+                                    }).toList(),
+                                  ),
+                          ),
+                        ),
+                        const SizedBox(height: 20),
                       ],
                     ),
                   ),
-
-                  const SizedBox(height: 20),
-                ],
-              ),
-            ),
+                ),
     );
   }
 
-  Widget _buildStatCard(
-    IconData icon,
-    String title,
-    String value,
-  ) {
+  Widget _buildSummaryCard({
+    required IconData icon,
+    required String title,
+    required String value,
+    required Color iconBg,
+    required Color iconColor,
+    bool fullWidth = false,
+  }) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.all(14),
+      width: fullWidth ? double.infinity : null,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(18),
         boxShadow: const [
-          BoxShadow(color: Colors.black12, blurRadius: 6),
+          BoxShadow(
+            color: Colors.black12,
+            blurRadius: 8,
+            offset: Offset(0, 3),
+          ),
         ],
       ),
       child: Row(
         children: [
-          CircleAvatar(
-            backgroundColor: Colors.orange.withOpacity(0.2),
-            child: Icon(icon, color: Colors.orange),
+          Container(
+            width: 42,
+            height: 42,
+            decoration: BoxDecoration(
+              color: iconBg,
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Icon(
+              icon,
+              color: iconColor,
+              size: 22,
+            ),
           ),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(title),
+                Text(
+                  title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: Colors.black54,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
                 const SizedBox(height: 4),
                 Text(
                   value,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
-                    fontSize: 18,
+                    fontSize: 15,
                     fontWeight: FontWeight.bold,
+                    color: Colors.black87,
                   ),
                 ),
               ],
@@ -426,61 +568,67 @@ class _ReportsScreenState extends State<ReportsScreen> {
     );
   }
 
-  Widget _buildTopItem(
-    String rank,
-    String name,
-    String price,
-    String soldText,
-    double progress,
-  ) {
+  Widget _buildSectionCard({
+    required String title,
+    required Widget child,
+  }) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.all(12),
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(18),
         boxShadow: const [
           BoxShadow(color: Colors.black12, blurRadius: 6),
         ],
       ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              CircleAvatar(
-                radius: 14,
-                backgroundColor: Colors.orange,
-                child: Text(
-                  rank,
-                  style: const TextStyle(color: Colors.white),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  name,
-                  style: const TextStyle(fontWeight: FontWeight.bold),
-                ),
-              ),
-              Text(
-                price,
-                style: const TextStyle(color: Colors.orange),
-              ),
-              const SizedBox(width: 6),
-              Text(
-                soldText,
-                style: const TextStyle(color: Colors.green),
-              ),
-            ],
+          Text(
+            title,
+            style: const TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 15,
+            ),
           ),
-          const SizedBox(height: 8),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(10),
-            child: LinearProgressIndicator(
-              value: progress,
-              minHeight: 6,
-              backgroundColor: Colors.grey.shade300,
-              valueColor: const AlwaysStoppedAnimation<Color>(Colors.orange),
+          const SizedBox(height: 12),
+          child,
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMiniStat({
+    required String label,
+    required String value,
+    required Color color,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+      decoration: BoxDecoration(
+        color: color.withAlpha(14),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: const TextStyle(
+              fontSize: 12,
+              color: Colors.black54,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            value,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.bold,
+              color: color,
             ),
           ),
         ],
