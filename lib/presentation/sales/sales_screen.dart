@@ -8,6 +8,7 @@ import '../../utils/currency_formatter.dart';
 import '../widgets/app_button.dart';
 import '../widgets/empty_state.dart';
 import '../widgets/header.dart';
+import '../../utils/dialog_helper.dart';
 
 class SalesScreen extends StatefulWidget {
   const SalesScreen({super.key});
@@ -108,7 +109,15 @@ class _SalesScreenState extends State<SalesScreen> {
     }
 
     try {
-      setState(() => isSaving = true);
+  final ok = await DialogHelper.confirm(
+    context,
+    title: "Simpan Transaksi",
+    message: "Apakah data sudah benar?",
+  );
+
+  if (!ok) return;
+
+  setState(() => isSaving = true);
 
       final menu = selectedItem!['menu'] as Map<String, dynamic>? ?? {};
       final String menuId = menu['id']?.toString() ?? '';

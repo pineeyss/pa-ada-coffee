@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../auth/login_page.dart';
 import '../widgets/header.dart';
+import '../../utils/dialog_helper.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -57,6 +58,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
       (route) => false,
     );
   }
+
+
 
   String get todayText {
     final now = DateTime.now();
@@ -206,7 +209,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           SizedBox(
                             width: double.infinity,
                             child: ElevatedButton.icon(
-                              onPressed: logout,
+                                onPressed: () async {
+                                final ok = await DialogHelper.confirm(
+                                  context,
+                                  title: "Logout",
+                                  message: "Yakin anda ingin keluar?",
+                                );
+                                if (!ok) return;
+                                await logout();
+                              },
                               icon: const Icon(Icons.logout),
                               label: const Text("Logout"),
                               style: ElevatedButton.styleFrom(
