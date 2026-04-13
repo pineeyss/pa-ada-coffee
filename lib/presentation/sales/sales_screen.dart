@@ -40,16 +40,21 @@ class _SalesScreenState extends State<SalesScreen> {
 
   Future<void> initSales() async {
     try {
-      setState(() => isLoading = true);
+      if (mounted) {
+        setState(() => isLoading = true);
+      }
 
-      await _stockService.initializeStocksForAllGerobak(defaultStock: 20);
-      final gerobaks = await _stockService.getGerobakOptions();
+      final gerobaks = await _stockService.getGerobakOptionsByRole();
 
       if (gerobaks.isEmpty) {
+        if (!mounted) return;
         setState(() {
           gerobakOptions = [];
           selectedGerobakId = null;
+          selectedItem = null;
           items = [];
+          qty = 1;
+          payment = null;
           isLoading = false;
         });
         return;
@@ -57,46 +62,76 @@ class _SalesScreenState extends State<SalesScreen> {
 
       selectedGerobakId ??= gerobaks.first['id']?.toString();
 
+      if (!mounted) return;
       setState(() {
         gerobakOptions = gerobaks;
       });
 
       await loadMenusByGerobak();
     } catch (e) {
-      setState(() => isLoading = false);
-
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Gagal load sales: $e")),
-      );
+      setState(() => isLoading = false);
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text("Gagal load sales: $e")));
     }
   }
 
   Future<void> loadMenusByGerobak() async {
     if (selectedGerobakId == null) {
+      if (!mounted) return;
       setState(() {
         items = [];
+        selectedItem = null;
+        qty = 1;
+        payment = null;
         isLoading = false;
       });
       return;
     }
 
     try {
-      setState(() => isLoading = true);
+      if (mounted) {
+        setState(() => isLoading = true);
+      }
 
       final data = await _stockService.getStocksByGerobak(selectedGerobakId!);
 
+      if (!mounted) return;
       setState(() {
         items = data;
         isLoading = false;
+
+        // reset selected item kalau item lama sudah tidak ada
+        if (selectedItem != null) {
+          final selectedMenuId = selectedItem!['menu_id']?.toString();
+          final stillExists = items.any(
+            (item) => item['menu_id']?.toString() == selectedMenuId,
+          );
+
+          if (!stillExists) {
+            selectedItem = null;
+            qty = 1;
+            payment = null;
+          } else {
+            final freshSelected = items.firstWhere(
+              (item) => item['menu_id']?.toString() == selectedMenuId,
+            );
+            selectedItem = freshSelected;
+
+            final latestStock = ((freshSelected['stock'] ?? 0) as num).toInt();
+            if (qty > latestStock) {
+              qty = latestStock > 0 ? latestStock : 1;
+            }
+          }
+        }
       });
     } catch (e) {
-      setState(() => isLoading = false);
-
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Gagal load menu: $e")),
-      );
+      setState(() => isLoading = false);
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text("Gagal load menu: $e")));
     }
   }
 
@@ -109,15 +144,17 @@ class _SalesScreenState extends State<SalesScreen> {
     }
 
     try {
-  final ok = await DialogHelper.confirm(
-    context,
-    title: "Simpan Transaksi",
-    message: "Apakah data sudah benar?",
-  );
+      final ok = await DialogHelper.confirm(
+        context,
+        title: "Simpan Transaksi",
+        message: "Apakah data sudah benar?",
+      );
 
-  if (!ok) return;
+      if (!ok) return;
 
-  setState(() => isSaving = true);
+      if (mounted) {
+        setState(() => isSaving = true);
+      }
 
       final menu = selectedItem!['menu'] as Map<String, dynamic>? ?? {};
       final String menuId = menu['id']?.toString() ?? '';
@@ -127,6 +164,17 @@ class _SalesScreenState extends State<SalesScreen> {
 
       if (menuId.isEmpty) {
         throw Exception('Menu tidak valid');
+      }
+
+      if (qty <= 0) {
+        throw Exception('Qty tidak valid');
+      }
+
+      if (currentStock <= 0) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Stock $menuName sudah habis")),
+        );
+        return;
       }
 
       if (currentStock < qty) {
@@ -163,6 +211,7 @@ class _SalesScreenState extends State<SalesScreen> {
       await loadMenusByGerobak();
 
       if (!mounted) return;
+
       _showSuccess();
 
       setState(() {
@@ -172,9 +221,9 @@ class _SalesScreenState extends State<SalesScreen> {
       });
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Gagal simpan transaksi: $e")),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text("Gagal simpan transaksi: $e")));
     } finally {
       if (mounted) {
         setState(() => isSaving = false);
@@ -241,8 +290,7 @@ class _SalesScreenState extends State<SalesScreen> {
                           AppHeader(
                             subtitle: "Quick and easy sales entry",
                             child: Container(
-                              padding:
-                                  const EdgeInsets.symmetric(horizontal: 12),
+                              padding: const EdgeInsets.symmetric(horizontal: 12),
                               decoration: BoxDecoration(
                                 color: Colors.white,
                                 borderRadius: BorderRadius.circular(
@@ -300,8 +348,8 @@ class _SalesScreenState extends State<SalesScreen> {
                                     ),
                                     itemBuilder: (_, i) {
                                       final item = items[i];
-                                      final menu = item['menu']
-                                              as Map<String, dynamic>? ??
+                                      final menu =
+                                          item['menu'] as Map<String, dynamic>? ??
                                           {};
 
                                       final String menuId =
@@ -319,7 +367,8 @@ class _SalesScreenState extends State<SalesScreen> {
                                           selectedItem?['menu_id'] == menuId;
                                       final isOutOfStock = stock <= 0;
                                       final isLowStock = stock > 0 &&
-                                          stock < AppConstants.lowStockThreshold;
+                                          stock <
+                                              AppConstants.lowStockThreshold;
 
                                       return GestureDetector(
                                         onTap: isOutOfStock
@@ -345,13 +394,12 @@ class _SalesScreenState extends State<SalesScreen> {
                                             ),
                                             border: isSelected
                                                 ? Border.all(
-                                                    color: AppConstants
-                                                        .primaryColor,
+                                                    color:
+                                                        AppConstants.primaryColor,
                                                     width: 1.8,
                                                   )
                                                 : Border.all(
-                                                    color:
-                                                        Colors.grey.shade200,
+                                                    color: Colors.grey.shade200,
                                                     width: 1,
                                                   ),
                                             boxShadow: [
@@ -379,8 +427,7 @@ class _SalesScreenState extends State<SalesScreen> {
                                               Text(
                                                 name,
                                                 maxLines: 1,
-                                                overflow:
-                                                    TextOverflow.ellipsis,
+                                                overflow: TextOverflow.ellipsis,
                                                 textAlign: TextAlign.center,
                                                 style: const TextStyle(
                                                   fontSize: 13,
@@ -392,8 +439,7 @@ class _SalesScreenState extends State<SalesScreen> {
                                               Text(
                                                 _formatRupiah(price),
                                                 maxLines: 1,
-                                                overflow:
-                                                    TextOverflow.ellipsis,
+                                                overflow: TextOverflow.ellipsis,
                                                 style: const TextStyle(
                                                   color: Colors.orange,
                                                   fontSize: 12,
@@ -408,14 +454,11 @@ class _SalesScreenState extends State<SalesScreen> {
                                                   vertical: 4,
                                                 ),
                                                 decoration: BoxDecoration(
-                                                  color: isOutOfStock ||
-                                                          isLowStock
+                                                  color: isOutOfStock || isLowStock
                                                       ? Colors.red.withAlpha(18)
                                                       : Colors.grey.shade100,
                                                   borderRadius:
-                                                      BorderRadius.circular(
-                                                    999,
-                                                  ),
+                                                      BorderRadius.circular(999),
                                                 ),
                                                 child: Text(
                                                   isOutOfStock
@@ -423,13 +466,10 @@ class _SalesScreenState extends State<SalesScreen> {
                                                       : "Stock $stock",
                                                   style: TextStyle(
                                                     fontSize: 10,
-                                                    color: isOutOfStock ||
-                                                            isLowStock
+                                                    color: isOutOfStock || isLowStock
                                                         ? Colors.red
-                                                        : Colors
-                                                            .grey.shade700,
-                                                    fontWeight:
-                                                        FontWeight.w600,
+                                                        : Colors.grey.shade700,
+                                                    fontWeight: FontWeight.w600,
                                                   ),
                                                 ),
                                               ),
@@ -534,9 +574,7 @@ class _SalesScreenState extends State<SalesScreen> {
                       children: [
                         _qtyButton(
                           icon: Icons.remove,
-                          onTap: qty > 1
-                              ? () => setState(() => qty--)
-                              : null,
+                          onTap: qty > 1 ? () => setState(() => qty--) : null,
                         ),
                         Text(
                           "$qty",
@@ -572,8 +610,7 @@ class _SalesScreenState extends State<SalesScreen> {
             ),
             const SizedBox(height: 14),
             Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
               decoration: BoxDecoration(
                 color: AppConstants.primaryColor.withAlpha(12),
                 borderRadius: BorderRadius.circular(
@@ -603,7 +640,7 @@ class _SalesScreenState extends State<SalesScreen> {
             const SizedBox(height: 14),
             AppButton(
               text: "Save Transaction",
-              onPressed: _recordSale,
+              onPressed: isSaving ? null : _recordSale,
               isLoading: isSaving,
             ),
           ],

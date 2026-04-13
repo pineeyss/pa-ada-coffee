@@ -12,82 +12,53 @@ class StockService {
     return List<Map<String, dynamic>>.from(response);
   }
 
-  Future<void> initializeStocksForAllGerobak({
-    int defaultStock = 20,
-  }) async {
-    final menusResponse = await supabase.from('menu').select('id');
-    final gerobakResponse = await supabase.from('gerobak').select('id');
-    final existingResponse = await supabase
-        .from('stock_outlet')
-        .select('menu_id, gerobak_id');
-
-    final menus = List<Map<String, dynamic>>.from(menusResponse);
-    final gerobaks = List<Map<String, dynamic>>.from(gerobakResponse);
-    final existing = List<Map<String, dynamic>>.from(existingResponse);
-
-    final existingPairs = existing
-        .map((e) => '${e['menu_id']}_${e['gerobak_id']}')
-        .toSet();
-
-    final List<Map<String, dynamic>> rowsToInsert = [];
-
-    for (final menu in menus) {
-      final menuId = menu['id']?.toString();
-      if (menuId == null || menuId.isEmpty) continue;
-
-      for (final gerobak in gerobaks) {
-        final gerobakId = gerobak['id']?.toString();
-        if (gerobakId == null || gerobakId.isEmpty) continue;
-
-        final key = '${menuId}_$gerobakId';
-        if (!existingPairs.contains(key)) {
-          rowsToInsert.add({
-            'menu_id': menuId,
-            'gerobak_id': gerobakId,
-            'stock': defaultStock,
-          });
-        }
-      }
-    }
-
-    if (rowsToInsert.isNotEmpty) {
-      await supabase.from('stock_outlet').insert(rowsToInsert);
-    }
-  }
-
   Future<List<Map<String, dynamic>>> getStocksByGerobak(String gerobakId) async {
-    await initializeStocksForAllGerobak(defaultStock: 20);
-
     final response = await supabase
-        .from('stock_outlet')
+        .from('stok_gerobak')
         .select(
-          'id, stock, gerobak_id, menu_id, menu:menu_id(id, name, price, category, emoji, created_at)',
+          '''
+          id,
+          gerobak_id,
+          menu_id,
+          stok_awal,
+          stok_saat_ini,
+          created_at,
+          menu:menu_id (
+            id,
+            name,
+            price,
+            category,
+            emoji,
+            created_at
+          )
+          ''',
         )
         .eq('gerobak_id', gerobakId)
-        .order('updated_at', ascending: false);
+        .order('created_at', ascending: false);
 
-    return List<Map<String, dynamic>>.from(response);
+    final data = List<Map<String, dynamic>>.from(response);
+
+    return data.map((item) {
+      return {
+        ...item,
+        'stock': item['stok_saat_ini'] ?? 0,
+      };
+    }).toList();
   }
 
   Future<int> getStockByMenuAndGerobak({
     required String menuId,
     required String gerobakId,
   }) async {
-    await createInitialStockIfNotExists(
-      menuId: menuId,
-      gerobakId: gerobakId,
-      stock: 20,
-    );
-
     final response = await supabase
-        .from('stock_outlet')
-        .select('stock')
+        .from('stok_gerobak')
+        .select('stok_saat_ini')
         .eq('menu_id', menuId)
         .eq('gerobak_id', gerobakId)
         .maybeSingle();
 
-    if (response == null) return 20;
-    return (response['stock'] ?? 20) as int;
+    if (response == null) return 0;
+    return ((response['stok_saat_ini'] ?? 0) as num).toInt();
   }
 
   Future<void> updateStock({
@@ -96,28 +67,48 @@ class StockService {
     required int stock,
   }) async {
     final existing = await supabase
-        .from('stock_outlet')
+        .from('stok_gerobak')
         .select('id')
         .eq('menu_id', menuId)
         .eq('gerobak_id', gerobakId)
         .maybeSingle();
 
     if (existing == null) {
-      await supabase.from('stock_outlet').insert({
+      await supabase.from('stok_gerobak').insert({
+        'id': null,
         'menu_id': menuId,
         'gerobak_id': gerobakId,
-        'stock': stock,
+        'stok_awal': stock,
+        'stok_saat_ini': stock,
       });
     } else {
       await supabase
-          .from('stock_outlet')
+          .from('stok_gerobak')
           .update({
-            'stock': stock,
-            'updated_at': DateTime.now().toIso8601String(),
+            'stok_saat_ini': stock,
           })
           .eq('menu_id', menuId)
           .eq('gerobak_id', gerobakId);
     }
+  }
+
+  Future<void> increaseStock({
+    required String menuId,
+    required String gerobakId,
+    required int qty,
+  }) async {
+    final currentStock = await getStockByMenuAndGerobak(
+      menuId: menuId,
+      gerobakId: gerobakId,
+    );
+
+    final newStock = currentStock + qty;
+
+    await updateStock(
+      menuId: menuId,
+      gerobakId: gerobakId,
+      stock: newStock,
+    );
   }
 
   Future<void> decreaseStock({
@@ -146,21 +137,66 @@ class StockService {
   Future<void> createInitialStockIfNotExists({
     required String menuId,
     required String gerobakId,
-    int stock = 20,
+    int stock = 0,
   }) async {
     final existing = await supabase
-        .from('stock_outlet')
+        .from('stok_gerobak')
         .select('id')
         .eq('menu_id', menuId)
         .eq('gerobak_id', gerobakId)
         .maybeSingle();
 
     if (existing == null) {
-      await supabase.from('stock_outlet').insert({
+      await supabase.from('stok_gerobak').insert({
         'menu_id': menuId,
         'gerobak_id': gerobakId,
-        'stock': stock,
+        'stok_awal': stock,
+        'stok_saat_ini': stock,
       });
     }
+  }
+
+  Future<String> getCurrentUserRole() async {
+  final user = supabase.auth.currentUser;
+  if (user == null) return 'owner';
+
+  final profile = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
+      .maybeSingle();
+
+  return (profile?['role'] ?? 'owner').toString().toLowerCase();
+}
+
+  Future<List<Map<String, dynamic>>> getGerobakOptionsByRole() async {
+    final user = supabase.auth.currentUser;
+    if (user == null) {
+      final response = await supabase
+          .from('gerobak')
+          .select('id, nama_gerobak, rider_id')
+          .order('nama_gerobak');
+
+      return List<Map<String, dynamic>>.from(response);
+    }
+
+    final role = await getCurrentUserRole();
+
+    if (role == 'rider') {
+      final response = await supabase
+          .from('gerobak')
+          .select('id, nama_gerobak, rider_id')
+          .eq('rider_id', user.id)
+          .order('nama_gerobak');
+
+      return List<Map<String, dynamic>>.from(response);
+    }
+
+    final response = await supabase
+        .from('gerobak')
+        .select('id, nama_gerobak, rider_id')
+        .order('nama_gerobak');
+
+    return List<Map<String, dynamic>>.from(response);
   }
 }

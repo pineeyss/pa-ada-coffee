@@ -38,30 +38,40 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> initDashboard() async {
     try {
-      setState(() {
-        isLoading = true;
-        errorMessage = null;
-      });
+      if (mounted) {
+        setState(() {
+          isLoading = true;
+          errorMessage = null;
+        });
+      }
 
       final data = await supabase
           .from('gerobak')
           .select('id, nama_gerobak')
           .order('nama_gerobak');
 
-      gerobakOptions = List<Map<String, dynamic>>.from(data);
+      final gerobaks = List<Map<String, dynamic>>.from(data);
 
-      if (gerobakOptions.isEmpty) {
+      if (gerobaks.isEmpty) {
+        if (!mounted) return;
         setState(() {
+          gerobakOptions = [];
           isLoading = false;
           errorMessage = 'Data gerobak kosong';
         });
         return;
       }
 
-      selectedGerobakId = gerobakOptions.first['id']?.toString();
+      selectedGerobakId ??= gerobaks.first['id']?.toString();
+
+      if (!mounted) return;
+      setState(() {
+        gerobakOptions = gerobaks;
+      });
 
       await loadDashboard();
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         isLoading = false;
         errorMessage = 'Gagal load data: $e';
@@ -73,9 +83,12 @@ class _HomeScreenState extends State<HomeScreen> {
     if (selectedGerobakId == null) return;
 
     try {
-      setState(() {
-        isLoading = true;
-      });
+      if (mounted) {
+        setState(() {
+          isLoading = true;
+          errorMessage = null;
+        });
+      }
 
       final revenue = await _reportService.getTotalRevenue(
         gerobakId: selectedGerobakId,
@@ -93,16 +106,19 @@ class _HomeScreenState extends State<HomeScreen> {
         gerobakId: selectedGerobakId,
       );
 
+      final lowStock = await _loadLowStockCount();
+
+      if (!mounted) return;
       setState(() {
         totalRevenue = revenue;
         totalOrders = orders;
         topSellingItems = topItems;
         recentSales = recent;
+        lowStockCount = lowStock;
         isLoading = false;
       });
-
-      await loadLowStock();
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         isLoading = false;
         errorMessage = 'Gagal load dashboard: $e';
@@ -110,51 +126,70 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  Future<void> loadLowStock() async {
-    if (selectedGerobakId == null) return;
+  Future<int> _loadLowStockCount() async {
+    if (selectedGerobakId == null) return 0;
 
     final result = await supabase
-        .from('stock_outlet')
-        .select('stock')
+        .from('stok_gerobak')
+        .select('stok_saat_ini')
         .eq('gerobak_id', selectedGerobakId!);
 
     int count = 0;
 
-    for (var item in result) {
-      if ((item['stock'] ?? 0) < 5) {
+    for (final item in result) {
+      final stock = ((item['stok_saat_ini'] ?? 0) as num).toInt();
+      if (stock < 5) {
         count++;
       }
     }
 
-    setState(() {
-      lowStockCount = count;
-    });
+    return count;
   }
 
-  void _openSalesScreen() {
-    Navigator.push(
+  Future<void> _openSalesScreen() async {
+    await Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => const SalesScreen()),
     );
+
+    await loadDashboard();
   }
 
-  void _openReportsScreen() {
-    Navigator.push(
+  Future<void> _openReportsScreen() async {
+    await Navigator.push(
       context,
       MaterialPageRoute(builder: (_) => const ReportsScreen()),
     );
+
+    await loadDashboard();
   }
 
   String _getTodayText() {
     final now = DateTime.now();
 
     const days = [
-      'Senin','Selasa','Rabu','Kamis','Jumat','Sabtu','Minggu'
+      'Senin',
+      'Selasa',
+      'Rabu',
+      'Kamis',
+      'Jumat',
+      'Sabtu',
+      'Minggu',
     ];
 
     const months = [
-      'Januari','Februari','Maret','April','Mei','Juni',
-      'Juli','Agustus','September','Oktober','November','Desember'
+      'Januari',
+      'Februari',
+      'Maret',
+      'April',
+      'Mei',
+      'Juni',
+      'Juli',
+      'Agustus',
+      'September',
+      'Oktober',
+      'November',
+      'Desember',
     ];
 
     return "${days[now.weekday - 1]}, ${now.day} ${months[now.month - 1]} ${now.year}";
@@ -191,273 +226,288 @@ class _HomeScreenState extends State<HomeScreen> {
       );
     }
 
-    return SingleChildScrollView(
-      child: Column(
-        children: [
-          AppHeader(
-            subtitle: _getTodayText(),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(14),
-              ),
-              child: DropdownButton<String>(
-                isExpanded: true,
-                underline: const SizedBox(),
-                value: selectedGerobakId,
-                items: gerobakOptions.map((item) {
-                  return DropdownMenuItem<String>(
-                    value: item['id']?.toString(),
-                    child: Text(item['nama_gerobak']?.toString() ?? '-'),
-                  );
-                }).toList(),
-                onChanged: (value) async {
-                  if (value == null) return;
-                  setState(() => selectedGerobakId = value);
-                  await loadDashboard();
-                },
-              ),
-            ),
-          ),
-
-          if (lowStockCount > 0)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+    return RefreshIndicator(
+      onRefresh: loadDashboard,
+      child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        child: Column(
+          children: [
+            AppHeader(
+              subtitle: _getTodayText(),
               child: Container(
-                padding: const EdgeInsets.all(10),
+                padding: const EdgeInsets.symmetric(horizontal: 12),
                 decoration: BoxDecoration(
-                  color: Colors.red.withAlpha(20),
-                  borderRadius: BorderRadius.circular(12),
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(14),
                 ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.warning, color: Colors.red),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        "$lowStockCount item stock hampir habis",
-                        style: const TextStyle(color: Colors.red),
-                      ),
-                    ),
-                  ],
+                child: DropdownButton<String>(
+                  isExpanded: true,
+                  underline: const SizedBox(),
+                  value: selectedGerobakId,
+                  items: gerobakOptions.map((item) {
+                    return DropdownMenuItem<String>(
+                      value: item['id']?.toString(),
+                      child: Text(item['nama_gerobak']?.toString() ?? '-'),
+                    );
+                  }).toList(),
+                  onChanged: (value) async {
+                    if (value == null) return;
+                    setState(() => selectedGerobakId = value);
+                    await loadDashboard();
+                  },
                 ),
               ),
             ),
 
-          const SizedBox(height: 16),
-
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 14),
-            child: Column(
-              children: [
-
-                Container(
-                  padding: const EdgeInsets.all(14),
+            if (lowStockCount > 0)
+              Padding(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                child: Container(
+                  padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(20),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withAlpha(10),
-                        blurRadius: 10,
-                      ),
-                    ],
+                    color: Colors.red.withAlpha(20),
+                    borderRadius: BorderRadius.circular(12),
                   ),
                   child: Row(
                     children: [
+                      const Icon(Icons.warning, color: Colors.red),
+                      const SizedBox(width: 8),
                       Expanded(
-                        child: GestureDetector(
-                          onTap: _openSalesScreen,
-                          child: _miniStat(
-                            "Sales",
-                            formatRupiah(totalRevenue),
-                            Icons.payments,
-                            Colors.orange,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: GestureDetector(
-                          onTap: _openReportsScreen,
-                          child: _miniStat(
-                            "Orders",
-                            "$totalOrders",
-                            Icons.receipt_long,
-                            Colors.amber,
-                          ),
+                        child: Text(
+                          "$lowStockCount item stock hampir habis",
+                          style: const TextStyle(color: Colors.red),
                         ),
                       ),
                     ],
                   ),
                 ),
+              ),
 
-                const SizedBox(height: 16),
+            const SizedBox(height: 16),
 
-                _sectionCard(
-                  "Top Selling Items",
-                  topSellingItems.isEmpty
-                      ? const EmptyState(
-                          icon: Icons.local_cafe_outlined,
-                          title: "Belum ada data penjualan",
-                          subtitle: "Data top selling item akan muncul setelah transaksi masuk.",
-                        )
-                      : Column(
-                          children: topSellingItems
-                              .take(5)
-                              .toList()
-                              .asMap()
-                              .entries
-                              .map((entry) {
-                            final index = entry.key;
-                            final item = entry.value;
-
-                            final itemName = item['name']?.toString() ?? '-';
-                            final qty = (item['qty'] ?? 0) as int;
-                            final revenue = (item['revenue'] ?? 0) as int;
-
-                            return Container(
-                              margin: const EdgeInsets.only(bottom: 10),
-                              padding: const EdgeInsets.all(12),
-                              decoration: BoxDecoration(
-                                color: Colors.orange.withAlpha(12),
-                                borderRadius: BorderRadius.circular(14),
-                              ),
-                              child: Row(
-                                children: [
-                                  Container(
-                                    width: 28,
-                                    height: 28,
-                                    alignment: Alignment.center,
-                                    decoration: BoxDecoration(
-                                      color: Colors.orange,
-                                      borderRadius: BorderRadius.circular(10),
-                                    ),
-                                    child: Text(
-                                      "${index + 1}",
-                                      style: const TextStyle(
-                                        color: Colors.white,
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 12,
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 10),
-                                  Expanded(
-                                    child: Text(
-                                      itemName,
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                  ),
-                                  Column(
-                                    crossAxisAlignment: CrossAxisAlignment.end,
-                                    children: [
-                                      Text(
-                                        "$qty sold",
-                                        style: const TextStyle(
-                                          fontSize: 12,
-                                          color: Colors.black54,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 2),
-                                      Text(
-                                        formatRupiah(revenue),
-                                        style: const TextStyle(
-                                          fontSize: 12,
-                                          color: Colors.orange,
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ],
-                              ),
-                            );
-                          }).toList(),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 14),
+              child: Column(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(20),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withAlpha(10),
+                          blurRadius: 10,
                         ),
-                ),
+                      ],
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: _openSalesScreen,
+                            child: _miniStat(
+                              "Sales",
+                              formatRupiah(totalRevenue),
+                              Icons.payments,
+                              Colors.orange,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: _openReportsScreen,
+                            child: _miniStat(
+                              "Orders",
+                              "$totalOrders",
+                              Icons.receipt_long,
+                              Colors.amber,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
 
-                const SizedBox(height: 14),
+                  const SizedBox(height: 16),
 
-                _sectionCard(
-                  "Recent Sales",
-                  recentSales.isEmpty
-                      ? const EmptyState(
-                          icon: Icons.receipt_long_outlined,
-                          title: "Belum ada transaksi terbaru",
-                          subtitle: "Riwayat transaksi akan tampil di sini setelah ada penjualan.",
-                        )
-                      : Column(
-                          children: recentSales.take(6).map((sale) {
-                            final menuName = sale['menu_name']?.toString() ?? '-';
-                            final qty = (sale['qty'] ?? 0) as int;
-                            final total = (sale['total_harga'] ?? 0) as int;
+                  _sectionCard(
+                    "Top Selling Items",
+                    topSellingItems.isEmpty
+                        ? const EmptyState(
+                            icon: Icons.local_cafe_outlined,
+                            title: "Belum ada data penjualan",
+                            subtitle:
+                                "Data top selling item akan muncul setelah transaksi masuk.",
+                          )
+                        : Column(
+                            children: topSellingItems
+                                .take(5)
+                                .toList()
+                                .asMap()
+                                .entries
+                                .map((entry) {
+                              final index = entry.key;
+                              final item = entry.value;
 
-                            return Container(
-                              margin: const EdgeInsets.only(bottom: 10),
-                              padding: const EdgeInsets.all(12),
-                              decoration: BoxDecoration(
-                                color: Colors.grey.shade50,
-                                borderRadius: BorderRadius.circular(14),
-                              ),
-                              child: Row(
-                                children: [
-                                  Container(
-                                    width: 38,
-                                    height: 38,
-                                    decoration: BoxDecoration(
-                                      color: Colors.orange.withAlpha(16),
-                                      borderRadius: BorderRadius.circular(12),
+                              final itemName =
+                                  item['name']?.toString() ?? '-';
+                              final qty = ((item['qty'] ?? 0) as num).toInt();
+                              final revenue =
+                                  ((item['revenue'] ?? 0) as num).toInt();
+
+                              return Container(
+                                margin: const EdgeInsets.only(bottom: 10),
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: Colors.orange.withAlpha(12),
+                                  borderRadius: BorderRadius.circular(14),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Container(
+                                      width: 28,
+                                      height: 28,
+                                      alignment: Alignment.center,
+                                      decoration: BoxDecoration(
+                                        color: Colors.orange,
+                                        borderRadius:
+                                            BorderRadius.circular(10),
+                                      ),
+                                      child: Text(
+                                        "${index + 1}",
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 12,
+                                        ),
+                                      ),
                                     ),
-                                    child: const Icon(
-                                      Icons.shopping_bag_outlined,
-                                      color: Colors.orange,
+                                    const SizedBox(width: 10),
+                                    Expanded(
+                                      child: Text(
+                                        itemName,
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
                                     ),
-                                  ),
-                                  const SizedBox(width: 10),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                    Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.end,
                                       children: [
                                         Text(
-                                          menuName,
-                                          style: const TextStyle(
-                                            fontWeight: FontWeight.w600,
-                                          ),
-                                        ),
-                                        const SizedBox(height: 2),
-                                        Text(
-                                          "$qty item",
+                                          "$qty sold",
                                           style: const TextStyle(
                                             fontSize: 12,
                                             color: Colors.black54,
                                           ),
                                         ),
+                                        const SizedBox(height: 2),
+                                        Text(
+                                          formatRupiah(revenue),
+                                          style: const TextStyle(
+                                            fontSize: 12,
+                                            color: Colors.orange,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
                                       ],
                                     ),
-                                  ),
-                                  Text(
-                                    formatRupiah(total),
-                                    style: const TextStyle(
-                                      color: Colors.orange,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            );
-                          }).toList(),
-                        ),
-                ),
-              ],
-            ),
-          ),
+                                  ],
+                                ),
+                              );
+                            }).toList(),
+                          ),
+                  ),
 
-          const SizedBox(height: 20),
-        ],
+                  const SizedBox(height: 14),
+
+                  _sectionCard(
+                    "Recent Sales",
+                    recentSales.isEmpty
+                        ? const EmptyState(
+                            icon: Icons.receipt_long_outlined,
+                            title: "Belum ada transaksi terbaru",
+                            subtitle:
+                                "Riwayat transaksi akan tampil di sini setelah ada penjualan.",
+                          )
+                        : Column(
+                            children: recentSales.take(6).map((sale) {
+                              final menuName =
+                                  sale['menu_name']?.toString() ?? '-';
+                              final qty =
+                                  ((sale['qty'] ?? 0) as num).toInt();
+                              final total = ((sale['total_harga'] ?? 0) as num)
+                                  .toInt();
+
+                              return Container(
+                                margin: const EdgeInsets.only(bottom: 10),
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: Colors.grey.shade50,
+                                  borderRadius: BorderRadius.circular(14),
+                                ),
+                                child: Row(
+                                  children: [
+                                    Container(
+                                      width: 38,
+                                      height: 38,
+                                      decoration: BoxDecoration(
+                                        color: Colors.orange.withAlpha(16),
+                                        borderRadius:
+                                            BorderRadius.circular(12),
+                                      ),
+                                      child: const Icon(
+                                        Icons.shopping_bag_outlined,
+                                        color: Colors.orange,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 10),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            menuName,
+                                            style: const TextStyle(
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 2),
+                                          Text(
+                                            "$qty item",
+                                            style: const TextStyle(
+                                              fontSize: 12,
+                                              color: Colors.black54,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    Text(
+                                      formatRupiah(total),
+                                      style: const TextStyle(
+                                        color: Colors.orange,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            }).toList(),
+                          ),
+                  ),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 20),
+          ],
+        ),
       ),
     );
   }
@@ -479,7 +529,10 @@ class _HomeScreenState extends State<HomeScreen> {
               children: [
                 Text(title, style: const TextStyle(fontSize: 12)),
                 const SizedBox(height: 4),
-                Text(value, style: const TextStyle(fontWeight: FontWeight.bold)),
+                Text(
+                  value,
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
               ],
             ),
           ),
