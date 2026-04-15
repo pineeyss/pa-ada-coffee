@@ -26,11 +26,25 @@ class _SalesScreenState extends State<SalesScreen> {
 
   Map<String, dynamic>? selectedItem;
   String? selectedGerobakId;
+  String _role = 'owner';
 
   bool isLoading = true;
   bool isSaving = false;
   int qty = 1;
   String? payment;
+
+  bool get _isRider => _role == 'rider';
+
+  String get _selectedGerobakName {
+    if (gerobakOptions.isEmpty || selectedGerobakId == null) return '-';
+
+    final found = gerobakOptions.where(
+      (item) => item['id']?.toString() == selectedGerobakId,
+    );
+
+    if (found.isEmpty) return '-';
+    return found.first['nama_gerobak']?.toString() ?? '-';
+  }
 
   @override
   void initState() {
@@ -44,11 +58,13 @@ class _SalesScreenState extends State<SalesScreen> {
         setState(() => isLoading = true);
       }
 
+      final role = await _stockService.getCurrentUserRole();
       final gerobaks = await _stockService.getGerobakOptionsByRole();
 
       if (gerobaks.isEmpty) {
         if (!mounted) return;
         setState(() {
+          _role = role;
           gerobakOptions = [];
           selectedGerobakId = null;
           selectedItem = null;
@@ -60,10 +76,11 @@ class _SalesScreenState extends State<SalesScreen> {
         return;
       }
 
-      selectedGerobakId ??= gerobaks.first['id']?.toString();
+      selectedGerobakId = gerobaks.first['id']?.toString();
 
       if (!mounted) return;
       setState(() {
+        _role = role;
         gerobakOptions = gerobaks;
       });
 
@@ -71,9 +88,9 @@ class _SalesScreenState extends State<SalesScreen> {
     } catch (e) {
       if (!mounted) return;
       setState(() => isLoading = false);
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text("Gagal load sales: $e")));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Gagal load sales: $e")),
+      );
     }
   }
 
@@ -99,10 +116,9 @@ class _SalesScreenState extends State<SalesScreen> {
 
       if (!mounted) return;
       setState(() {
-        items = data;
+        items = data.take(12).toList();
         isLoading = false;
 
-        // reset selected item kalau item lama sudah tidak ada
         if (selectedItem != null) {
           final selectedMenuId = selectedItem!['menu_id']?.toString();
           final stillExists = items.any(
@@ -129,9 +145,9 @@ class _SalesScreenState extends State<SalesScreen> {
     } catch (e) {
       if (!mounted) return;
       setState(() => isLoading = false);
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text("Gagal load menu: $e")));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Gagal load menu: $e")),
+      );
     }
   }
 
@@ -221,9 +237,9 @@ class _SalesScreenState extends State<SalesScreen> {
       });
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text("Gagal simpan transaksi: $e")));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Gagal simpan transaksi: $e")),
+      );
     } finally {
       if (mounted) {
         setState(() => isSaving = false);
@@ -261,17 +277,89 @@ class _SalesScreenState extends State<SalesScreen> {
     return menu['name']?.toString() ?? '-';
   }
 
-  String get _selectedEmoji {
-    final menu = selectedItem?['menu'] as Map<String, dynamic>? ?? {};
-    return menu['emoji']?.toString() ?? '☕';
-  }
-
   int get _selectedStock {
     return ((selectedItem?['stock'] ?? 0) as num).toInt();
   }
 
   int get _totalPrice {
     return _selectedPrice * qty;
+  }
+
+  String _normalizeName(String value) {
+    return value.toLowerCase().trim().replaceAll(RegExp(r'[^a-z0-9]+'), ' ');
+  }
+
+  String? _getMenuImageAssetByName(String menuName) {
+    final name = _normalizeName(menuName);
+
+    const imageMap = <String, String>{
+      'Americano'     : 'assets/images/menu_07.png',
+      'Pandawa'       : 'assets/images/menu_06.png',
+      'Butterscotch'  : 'assets/images/menu_06.png',
+      'Caramel'       : 'assets/images/menu_06.png',
+      'Hazelnut'      : 'assets/images/menu_06.png',
+      'Salted Caramel': 'assets/images/menu_06.png',
+      'Mico'          : 'assets/images/menu_06.png',
+      'Lowco'         : 'assets/images/menu_03.png',
+      'Matcha'        : 'assets/images/menu_05.png',
+      'Taro'          : 'assets/images/menu_01.png',
+      'Red Velvet'    : 'assets/images/menu_02.png',
+      'Choco'         : 'assets/images/menu_04.png',
+    };
+
+    return imageMap[name];
+  }
+
+  String _getFallbackImageByIndex(int index) {
+    const fallbackImages = [
+      'assets/images/menu_01.png',
+      'assets/images/menu_02.png',
+      'assets/images/menu_03.png',
+      'assets/images/menu_04.png',
+      'assets/images/menu_05.png',
+      'assets/images/menu_06.png',
+      'assets/images/menu_07.png',
+    ];
+
+    if (index < 0 || index >= fallbackImages.length) {
+      return fallbackImages.first;
+    }
+
+    return fallbackImages[index];
+  }
+
+  Widget _buildMenuImage({
+    required String menuName,
+    required int index,
+    double? width,
+    double? height,
+    double borderRadius = 16,
+  }) {
+    final assetPath =
+        _getMenuImageAssetByName(menuName) ?? _getFallbackImageByIndex(index);
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(borderRadius),
+      child: Image.asset(
+        assetPath,
+        width: width,
+        height: height,
+        fit: BoxFit.cover,
+        errorBuilder: (_, __, ___) {
+          return Container(
+            width: width,
+            height: height,
+            color: Colors.orange.withAlpha(18),
+            alignment: Alignment.center,
+            child: const Icon(
+              Icons.local_cafe,
+              size: 34,
+              color: Colors.orange,
+            ),
+          );
+        },
+      ),
+    );
   }
 
   @override
@@ -290,38 +378,56 @@ class _SalesScreenState extends State<SalesScreen> {
                           AppHeader(
                             subtitle: "Quick and easy sales entry",
                             child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 12),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 12,
+                              ),
                               decoration: BoxDecoration(
                                 color: Colors.white,
                                 borderRadius: BorderRadius.circular(
                                   AppConstants.radiusSmall,
                                 ),
                               ),
-                              child: DropdownButton<String>(
-                                isExpanded: true,
-                                underline: const SizedBox(),
-                                value: selectedGerobakId,
-                                items: gerobakOptions.map((item) {
-                                  return DropdownMenuItem<String>(
-                                    value: item['id']?.toString(),
-                                    child: Text(
-                                      item['nama_gerobak']?.toString() ?? '-',
+                              child: _isRider
+                                  ? Row(
+                                      children: [
+                                        Expanded(
+                                          child: Text(
+                                            _selectedGerobakName,
+                                            style: const TextStyle(
+                                              fontSize: 16,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    )
+                                  : DropdownButton<String>(
+                                      isExpanded: true,
+                                      underline: const SizedBox(),
+                                      value: selectedGerobakId,
+                                      items: gerobakOptions.map((item) {
+                                        return DropdownMenuItem<String>(
+                                          value: item['id']?.toString(),
+                                          child: Text(
+                                            item['nama_gerobak']?.toString() ??
+                                                '-',
+                                          ),
+                                        );
+                                      }).toList(),
+                                      onChanged: (value) async {
+                                        if (value == null) return;
+
+                                        setState(() {
+                                          selectedGerobakId = value;
+                                          selectedItem = null;
+                                          qty = 1;
+                                          payment = null;
+                                        });
+
+                                        await loadMenusByGerobak();
+                                      },
                                     ),
-                                  );
-                                }).toList(),
-                                onChanged: (value) async {
-                                  if (value == null) return;
-
-                                  setState(() {
-                                    selectedGerobakId = value;
-                                    selectedItem = null;
-                                    qty = 1;
-                                    payment = null;
-                                  });
-
-                                  await loadMenusByGerobak();
-                                },
-                              ),
                             ),
                           ),
                           const SizedBox(height: 10),
@@ -344,20 +450,18 @@ class _SalesScreenState extends State<SalesScreen> {
                                       crossAxisCount: 2,
                                       mainAxisSpacing: 12,
                                       crossAxisSpacing: 12,
-                                      childAspectRatio: 1.45,
+                                      childAspectRatio: 0.78,
                                     ),
                                     itemBuilder: (_, i) {
                                       final item = items[i];
                                       final menu =
                                           item['menu'] as Map<String, dynamic>? ??
-                                          {};
+                                              {};
 
                                       final String menuId =
                                           menu['id']?.toString() ?? '';
                                       final String name =
                                           menu['name']?.toString() ?? '-';
-                                      final String emoji =
-                                          menu['emoji']?.toString() ?? '☕';
                                       final int price =
                                           ((menu['price'] ?? 0) as num).toInt();
                                       final int stock =
@@ -383,10 +487,7 @@ class _SalesScreenState extends State<SalesScreen> {
                                         child: AnimatedContainer(
                                           duration:
                                               const Duration(milliseconds: 180),
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 10,
-                                            vertical: 12,
-                                          ),
+                                          padding: const EdgeInsets.all(10),
                                           decoration: BoxDecoration(
                                             color: Colors.white,
                                             borderRadius: BorderRadius.circular(
@@ -394,12 +495,13 @@ class _SalesScreenState extends State<SalesScreen> {
                                             ),
                                             border: isSelected
                                                 ? Border.all(
-                                                    color:
-                                                        AppConstants.primaryColor,
+                                                    color: AppConstants
+                                                        .primaryColor,
                                                     width: 1.8,
                                                   )
                                                 : Border.all(
-                                                    color: Colors.grey.shade200,
+                                                    color:
+                                                        Colors.grey.shade200,
                                                     width: 1,
                                                   ),
                                             boxShadow: [
@@ -414,63 +516,75 @@ class _SalesScreenState extends State<SalesScreen> {
                                             ],
                                           ),
                                           child: Column(
-                                            mainAxisAlignment:
-                                                MainAxisAlignment.center,
+                                            crossAxisAlignment:
+                                                CrossAxisAlignment.start,
                                             children: [
-                                              Text(
-                                                emoji.isEmpty ? "☕" : emoji,
-                                                style: const TextStyle(
-                                                  fontSize: 32,
+                                              Expanded(
+                                                child: Stack(
+                                                  children: [
+                                                    Positioned.fill(
+                                                      child: _buildMenuImage(
+                                                        menuName: name,
+                                                        index: i,
+                                                        borderRadius: 16,
+                                                      ),
+                                                    ),
+                                                    Positioned(
+                                                      top: 8,
+                                                      right: 8,
+                                                      child: Container(
+                                                        padding:
+                                                            const EdgeInsets.symmetric(
+                                                          horizontal: 8,
+                                                          vertical: 4,
+                                                        ),
+                                                        decoration: BoxDecoration(
+                                                          color: isOutOfStock ||
+                                                                  isLowStock
+                                                              ? Colors.red
+                                                              : Colors.black87,
+                                                          borderRadius:
+                                                              BorderRadius.circular(
+                                                            999,
+                                                          ),
+                                                        ),
+                                                        child: Text(
+                                                          isOutOfStock
+                                                              ? "Habis"
+                                                              : "Stok $stock",
+                                                          style:
+                                                              const TextStyle(
+                                                            fontSize: 10,
+                                                            color: Colors.white,
+                                                            fontWeight:
+                                                                FontWeight.w600,
+                                                          ),
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  ],
                                                 ),
                                               ),
-                                              const SizedBox(height: 6),
+                                              const SizedBox(height: 10),
                                               Text(
                                                 name,
-                                                maxLines: 1,
+                                                maxLines: 2,
                                                 overflow: TextOverflow.ellipsis,
-                                                textAlign: TextAlign.center,
                                                 style: const TextStyle(
                                                   fontSize: 13,
                                                   fontWeight: FontWeight.w700,
                                                   color: Colors.black87,
                                                 ),
                                               ),
-                                              const SizedBox(height: 4),
+                                              const SizedBox(height: 6),
                                               Text(
                                                 _formatRupiah(price),
                                                 maxLines: 1,
                                                 overflow: TextOverflow.ellipsis,
                                                 style: const TextStyle(
                                                   color: Colors.orange,
-                                                  fontSize: 12,
+                                                  fontSize: 13,
                                                   fontWeight: FontWeight.w700,
-                                                ),
-                                              ),
-                                              const SizedBox(height: 6),
-                                              Container(
-                                                padding:
-                                                    const EdgeInsets.symmetric(
-                                                  horizontal: 8,
-                                                  vertical: 4,
-                                                ),
-                                                decoration: BoxDecoration(
-                                                  color: isOutOfStock || isLowStock
-                                                      ? Colors.red.withAlpha(18)
-                                                      : Colors.grey.shade100,
-                                                  borderRadius:
-                                                      BorderRadius.circular(999),
-                                                ),
-                                                child: Text(
-                                                  isOutOfStock
-                                                      ? "Out of stock"
-                                                      : "Stock $stock",
-                                                  style: TextStyle(
-                                                    fontSize: 10,
-                                                    color: isOutOfStock || isLowStock
-                                                        ? Colors.red
-                                                        : Colors.grey.shade700,
-                                                    fontWeight: FontWeight.w600,
-                                                  ),
                                                 ),
                                               ),
                                             ],
@@ -493,6 +607,10 @@ class _SalesScreenState extends State<SalesScreen> {
   }
 
   Widget _buildBottomCheckout() {
+    final selectedIndex = items.indexWhere(
+      (item) => item['menu_id']?.toString() == selectedItem?['menu_id']?.toString(),
+    );
+
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
       decoration: BoxDecoration(
@@ -515,20 +633,12 @@ class _SalesScreenState extends State<SalesScreen> {
           children: [
             Row(
               children: [
-                Container(
-                  width: 46,
-                  height: 46,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: AppConstants.primaryColor.withAlpha(16),
-                    borderRadius: BorderRadius.circular(
-                      AppConstants.radiusSmall,
-                    ),
-                  ),
-                  child: Text(
-                    _selectedEmoji.isEmpty ? "☕" : _selectedEmoji,
-                    style: const TextStyle(fontSize: 24),
-                  ),
+                _buildMenuImage(
+                  menuName: _selectedName,
+                  index: selectedIndex < 0 ? 0 : selectedIndex,
+                  width: 56,
+                  height: 56,
+                  borderRadius: 14,
                 ),
                 const SizedBox(width: 10),
                 Expanded(
@@ -610,7 +720,8 @@ class _SalesScreenState extends State<SalesScreen> {
             ),
             const SizedBox(height: 14),
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
               decoration: BoxDecoration(
                 color: AppConstants.primaryColor.withAlpha(12),
                 borderRadius: BorderRadius.circular(

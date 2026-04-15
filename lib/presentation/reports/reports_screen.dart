@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../data/services/report_service.dart';
+import '../../data/services/stock_service.dart';
 import '../../utils/currency_formatter.dart';
 import '../widgets/empty_state.dart';
 import '../widgets/header.dart';
@@ -14,8 +14,7 @@ class ReportsScreen extends StatefulWidget {
 
 class _ReportsScreenState extends State<ReportsScreen> {
   final ReportService _reportService = ReportService();
-  final SupabaseClient supabase = Supabase.instance.client;
-  
+  final StockService _stockService = StockService();
 
   bool isLoading = true;
   String? errorMessage;
@@ -26,10 +25,22 @@ class _ReportsScreenState extends State<ReportsScreen> {
   int weeklyRevenue = 0;
   int weeklyOrders = 0;
 
-
   List<Map<String, dynamic>> gerobakOptions = [];
-
   String? selectedGerobakId;
+  String _role = 'owner';
+
+  bool get _isRider => _role == 'rider';
+
+  String get _selectedGerobakName {
+    if (gerobakOptions.isEmpty || selectedGerobakId == null) return '-';
+
+    final found = gerobakOptions.where(
+      (item) => item['id']?.toString() == selectedGerobakId,
+    );
+
+    if (found.isEmpty) return '-';
+    return found.first['nama_gerobak']?.toString() ?? '-';
+  }
 
   @override
   void initState() {
@@ -39,30 +50,44 @@ class _ReportsScreenState extends State<ReportsScreen> {
 
   Future<void> initReports() async {
     try {
-      setState(() {
-        isLoading = true;
-        errorMessage = null;
-      });
-
-      final data = await supabase
-          .from('gerobak')
-          .select('id, nama_gerobak')
-          .order('nama_gerobak');
-
-      gerobakOptions = List<Map<String, dynamic>>.from(data);
-
-      if (gerobakOptions.isEmpty) {
+      if (mounted) {
         setState(() {
+          isLoading = true;
+          errorMessage = null;
+        });
+      }
+
+      final role = await _stockService.getCurrentUserRole();
+      final gerobaks = await _stockService.getGerobakOptionsByRole();
+
+      if (gerobaks.isEmpty) {
+        if (!mounted) return;
+        setState(() {
+          _role = role;
+          gerobakOptions = [];
+          selectedGerobakId = null;
+          totalRevenue = 0;
+          totalOrders = 0;
+          averageOrderValue = 0;
+          weeklyRevenue = 0;
+          weeklyOrders = 0;
           isLoading = false;
           errorMessage = 'Data gerobak kosong';
         });
         return;
       }
 
-      selectedGerobakId = gerobakOptions.first['id']?.toString();
+      selectedGerobakId = gerobaks.first['id']?.toString();
+
+      if (!mounted) return;
+      setState(() {
+        _role = role;
+        gerobakOptions = gerobaks;
+      });
 
       await loadReports();
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         isLoading = false;
         errorMessage = 'Gagal load gerobak: $e';
@@ -72,6 +97,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
 
   Future<void> loadReports() async {
     if (selectedGerobakId == null) {
+      if (!mounted) return;
       setState(() {
         isLoading = false;
         errorMessage = 'Gerobak belum dipilih';
@@ -80,10 +106,12 @@ class _ReportsScreenState extends State<ReportsScreen> {
     }
 
     try {
-      setState(() {
-        isLoading = true;
-        errorMessage = null;
-      });
+      if (mounted) {
+        setState(() {
+          isLoading = true;
+          errorMessage = null;
+        });
+      }
 
       final revenue = await _reportService.getTotalRevenue(
         gerobakId: selectedGerobakId,
@@ -94,22 +122,24 @@ class _ReportsScreenState extends State<ReportsScreen> {
       );
 
       final weeklyRev = await _reportService.getWeeklyRevenue(
-  gerobakId: selectedGerobakId,
-);
+        gerobakId: selectedGerobakId,
+      );
 
-final weeklyOrd = await _reportService.getWeeklyOrders(
-  gerobakId: selectedGerobakId,
-);
+      final weeklyOrd = await _reportService.getWeeklyOrders(
+        gerobakId: selectedGerobakId,
+      );
 
-    setState(() {
-      totalRevenue = revenue;
-      totalOrders = orders;
-      weeklyRevenue = weeklyRev;
-      weeklyOrders = weeklyOrd;
-      averageOrderValue = orders > 0 ? (revenue / orders).round() : 0;
-      isLoading = false;
-    });
+      if (!mounted) return;
+      setState(() {
+        totalRevenue = revenue;
+        totalOrders = orders;
+        weeklyRevenue = weeklyRev;
+        weeklyOrders = weeklyOrd;
+        averageOrderValue = orders > 0 ? (revenue / orders).round() : 0;
+        isLoading = false;
+      });
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         isLoading = false;
         errorMessage = 'Gagal load reports: $e';
@@ -198,28 +228,45 @@ final weeklyOrd = await _reportService.getWeeklyOrders(
                               color: Colors.white,
                               borderRadius: BorderRadius.circular(12),
                             ),
-                            child: DropdownButton<String>(
-                              isExpanded: true,
-                              underline: const SizedBox(),
-                              value: selectedGerobakId,
-                              items: gerobakOptions.map((item) {
-                                return DropdownMenuItem<String>(
-                                  value: item['id']?.toString(),
-                                  child: Text(
-                                    item['nama_gerobak']?.toString() ?? '-',
+                            child: _isRider
+                                ? SizedBox(
+                                    width: double.infinity,
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                        vertical: 14,
+                                      ),
+                                      child: Text(
+                                        _selectedGerobakName,
+                                        style: const TextStyle(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.w600,
+                                          color: Colors.black87,
+                                        ),
+                                      ),
+                                    ),
+                                  )
+                                : DropdownButton<String>(
+                                    isExpanded: true,
+                                    underline: const SizedBox(),
+                                    value: selectedGerobakId,
+                                    items: gerobakOptions.map((item) {
+                                      return DropdownMenuItem<String>(
+                                        value: item['id']?.toString(),
+                                        child: Text(
+                                          item['nama_gerobak']?.toString() ?? '-',
+                                        ),
+                                      );
+                                    }).toList(),
+                                    onChanged: (value) async {
+                                      if (value == null) return;
+
+                                      setState(() {
+                                        selectedGerobakId = value;
+                                      });
+
+                                      await loadReports();
+                                    },
                                   ),
-                                );
-                              }).toList(),
-                              onChanged: (value) async {
-                                if (value == null) return;
-
-                                setState(() {
-                                  selectedGerobakId = value;
-                                });
-
-                                await loadReports();
-                              },
-                            ),
                           ),
                         ),
                         const SizedBox(height: 12),
@@ -266,61 +313,74 @@ final weeklyOrd = await _reportService.getWeeklyOrders(
                           padding: const EdgeInsets.symmetric(horizontal: 12),
                           child: _buildSectionCard(
                             title: "Daily Overview",
-                            child: Row(
-                              children: [
-                                Expanded(
-                                  child: _buildMiniStat(
-                                    label: "Revenue",
-                                    value: formatRupiah(totalRevenue),
-                                    color: Colors.orange,
+                            child: totalRevenue == 0 && totalOrders == 0
+                                ? const EmptyState(
+                                    icon: Icons.insights_outlined,
+                                    title: 'Belum ada data hari ini',
+                                    subtitle:
+                                        'Data revenue dan order harian akan muncul setelah ada transaksi.',
+                                  )
+                                : Row(
+                                    children: [
+                                      Expanded(
+                                        child: _buildMiniStat(
+                                          label: "Revenue",
+                                          value: formatRupiah(totalRevenue),
+                                          color: Colors.orange,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 10),
+                                      Expanded(
+                                        child: _buildMiniStat(
+                                          label: "Orders",
+                                          value: "$totalOrders",
+                                          color: Colors.amber.shade700,
+                                        ),
+                                      ),
+                                    ],
                                   ),
-                                ),
-                                const SizedBox(width: 10),
-                                Expanded(
-                                  child: _buildMiniStat(
-                                    label: "Orders",
-                                    value: "$totalOrders",
-                                    color: Colors.amber.shade700,
-                                  ),
-                                ),
-                              ],
-                            ),
                           ),
                         ),
                         const SizedBox(height: 20),
                         Padding(
-  padding: const EdgeInsets.symmetric(horizontal: 12),
-  child: _buildSectionCard(
-    title: "Weekly Snapshot",
-    child: Row(
-      children: [
-        Expanded(
-          child: _buildMiniStat(
-            label: "Revenue",
-            value: formatRupiah(weeklyRevenue),
-            color: Colors.orange,
-          ),
-        ),
-        const SizedBox(width: 10),
-        Expanded(
-          child: _buildMiniStat(
-            label: "Orders",
-            value: "$weeklyOrders",
-            color: Colors.amber.shade700,
-          ),
-        ),
-      ],
-    ),
-  ),
-),
-const SizedBox(height: 20),                      
-                        ],
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          child: _buildSectionCard(
+                            title: "Weekly Snapshot",
+                            child: weeklyRevenue == 0 && weeklyOrders == 0
+                                ? const EmptyState(
+                                    icon: Icons.calendar_view_week_outlined,
+                                    title: 'Belum ada data minggu ini',
+                                    subtitle:
+                                        'Data mingguan akan tampil kalau sudah ada transaksi minggu ini.',
+                                  )
+                                : Row(
+                                    children: [
+                                      Expanded(
+                                        child: _buildMiniStat(
+                                          label: "Revenue",
+                                          value: formatRupiah(weeklyRevenue),
+                                          color: Colors.orange,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 10),
+                                      Expanded(
+                                        child: _buildMiniStat(
+                                          label: "Orders",
+                                          value: "$weeklyOrders",
+                                          color: Colors.amber.shade700,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                          ),
                         ),
-                        ),
-                        ),
-                            );
-                          }
-                          
+                        const SizedBox(height: 20),
+                      ],
+                    ),
+                  ),
+                ),
+    );
+  }
 
   Widget _buildSummaryCard({
     required IconData icon,
@@ -404,7 +464,10 @@ const SizedBox(height: 20),
         color: Colors.white,
         borderRadius: BorderRadius.circular(18),
         boxShadow: const [
-          BoxShadow(color: Colors.black12, blurRadius: 6),
+          BoxShadow(
+            color: Colors.black12,
+            blurRadius: 6,
+          ),
         ],
       ),
       child: Column(

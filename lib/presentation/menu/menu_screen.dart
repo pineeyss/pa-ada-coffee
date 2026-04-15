@@ -27,22 +27,102 @@ class _MenuScreenState extends State<MenuScreen> {
 
   Future<void> loadMenus() async {
     try {
-      setState(() => isLoading = true);
+      if (mounted) {
+        setState(() => isLoading = true);
+      }
 
       final data = await _menuService.getMenus();
 
+      if (!mounted) return;
       setState(() {
-        menuItems = data;
+        menuItems = data.take(12).toList();
         isLoading = false;
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() => isLoading = false);
 
-      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Gagal load menu: $e')),
       );
     }
+  }
+
+  String _normalizeName(String value) {
+    return value.toLowerCase().trim().replaceAll(RegExp(r'[^a-z0-9]+'), ' ');
+  }
+
+  String? _getMenuImageAssetByName(String menuName) {
+    final name = _normalizeName(menuName);
+
+    const imageMap = <String, String>{
+      'Americano'     : 'assets/images/menu_07.png',
+      'Pandawa'       : 'assets/images/menu_06.png',
+      'Butterscotch'  : 'assets/images/menu_06.png',
+      'Caramel'       : 'assets/images/menu_06.png',
+      'Hazelnut'      : 'assets/images/menu_06.png',
+      'Salted Caramel': 'assets/images/menu_06.png',
+      'Mico'          : 'assets/images/menu_06.png',
+      'Lowco'         : 'assets/images/menu_03.png',
+      'Matcha'        : 'assets/images/menu_05.png',
+      'Taro'          : 'assets/images/menu_01.png',
+      'Red Velvet'    : 'assets/images/menu_02.png',
+      'Choco'         : 'assets/images/menu_04.png',
+    };
+
+    return imageMap[name];
+  }
+
+  String _getFallbackImageByIndex(int index) {
+    const fallbackImages = [
+      'assets/images/menu_01.png',
+      'assets/images/menu_02.png',
+      'assets/images/menu_03.png',
+      'assets/images/menu_04.png',
+      'assets/images/menu_05.png',
+      'assets/images/menu_06.png',
+      'assets/images/menu_07.png',
+    ];
+
+    if (index < 0 || index >= fallbackImages.length) {
+      return fallbackImages.first;
+    }
+
+    return fallbackImages[index];
+  }
+
+  Widget _buildMenuImage({
+    required String menuName,
+    required int index,
+    double? width,
+    double? height,
+    double borderRadius = 16,
+  }) {
+    final assetPath =
+        _getMenuImageAssetByName(menuName) ?? _getFallbackImageByIndex(index);
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(borderRadius),
+      child: Image.asset(
+        assetPath,
+        width: width,
+        height: height,
+        fit: BoxFit.cover,
+        errorBuilder: (_, __, ___) {
+          return Container(
+            width: width,
+            height: height,
+            color: Colors.orange.withAlpha(18),
+            alignment: Alignment.center,
+            child: const Icon(
+              Icons.local_cafe,
+              size: 34,
+              color: Colors.orange,
+            ),
+          );
+        },
+      ),
+    );
   }
 
   @override
@@ -70,67 +150,67 @@ class _MenuScreenState extends State<MenuScreen> {
     );
   }
 
-Widget _header() {
-  return AppHeader(
-    title: Row(
-      children: [
-        const Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                "Menu Management",
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 22,
-                  fontWeight: FontWeight.bold,
+  Widget _header() {
+    return AppHeader(
+      title: Row(
+        children: [
+          const Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  "Menu Management",
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 22,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
-              ),
-              SizedBox(height: 6),
-              Text(
-                "Manage your coffee menu",
-                style: TextStyle(
-                  color: Colors.white70,
-                  fontSize: 14,
+                SizedBox(height: 6),
+                Text(
+                  "Manage your coffee menu",
+                  style: TextStyle(
+                    color: Colors.white70,
+                    fontSize: 14,
+                  ),
                 ),
-              ),
-            ],
-          ),
-        ),
-        GestureDetector(
-          onTap: _showAddModal,
-          child: const CircleAvatar(
-            radius: 22,
-            backgroundColor: Colors.white,
-            child: Icon(
-              Icons.add,
-              color: Colors.orange,
-              size: 28,
+              ],
             ),
           ),
-        ),
-      ],
-    ),
-    subtitle: "${menuItems.length} items",
-    child: TextField(
-      onChanged: (value) {
-        setState(() {
-          searchQuery = value;
-        });
-      },
-      decoration: InputDecoration(
-        hintText: "Search menu items...",
-        filled: true,
-        fillColor: Colors.white,
-        prefixIcon: const Icon(Icons.search),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide.none,
+          GestureDetector(
+            onTap: _showAddModal,
+            child: const CircleAvatar(
+              radius: 22,
+              backgroundColor: Colors.white,
+              child: Icon(
+                Icons.add,
+                color: Colors.orange,
+                size: 28,
+              ),
+            ),
+          ),
+        ],
+      ),
+      subtitle: "${menuItems.length} items",
+      child: TextField(
+        onChanged: (value) {
+          setState(() {
+            searchQuery = value;
+          });
+        },
+        decoration: InputDecoration(
+          hintText: "Search menu items...",
+          filled: true,
+          fillColor: Colors.white,
+          prefixIcon: const Icon(Icons.search),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: BorderSide.none,
+          ),
         ),
       ),
-    ),
-  );
-}
+    );
+  }
 
   Widget _categoryFilter() {
     final cats = ["All", "Coffee", "Signature", "Premium", "Non Coffee"];
@@ -172,37 +252,90 @@ Widget _header() {
 
     return RefreshIndicator(
       onRefresh: loadMenus,
-      child: ListView.builder(
+      child: GridView.builder(
         padding: const EdgeInsets.all(12),
         itemCount: items.length,
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 2,
+          mainAxisSpacing: 12,
+          crossAxisSpacing: 12,
+          childAspectRatio: 0.78,
+        ),
         itemBuilder: (_, i) {
           final item = items[i];
 
           return Container(
-            margin: const EdgeInsets.only(bottom: 10),
-            padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
               color: Colors.white,
-              borderRadius: BorderRadius.circular(16),
+              borderRadius: BorderRadius.circular(18),
               boxShadow: const [
                 BoxShadow(color: Colors.black12, blurRadius: 6),
               ],
             ),
-            child: Row(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  item.emoji.isEmpty ? "☕" : item.emoji,
-                  style: const TextStyle(fontSize: 28),
-                ),
-                const SizedBox(width: 10),
                 Expanded(
+                  child: Stack(
+                    children: [
+                      Positioned.fill(
+                        child: _buildMenuImage(
+                          menuName: item.name,
+                          index: i,
+                          borderRadius: 18,
+                        ),
+                      ),
+                      Positioned(
+                        top: 8,
+                        right: 8,
+                        child: PopupMenuButton<String>(
+                          color: Colors.white,
+                          onSelected: (value) {
+                            if (value == 'edit') {
+                              _showEditModal(item, i);
+                            } else if (value == 'delete') {
+                              _deleteItem(item);
+                            }
+                          },
+                          itemBuilder: (_) => const [
+                            PopupMenuItem(
+                              value: 'edit',
+                              child: Text('Edit'),
+                            ),
+                            PopupMenuItem(
+                              value: 'delete',
+                              child: Text('Hapus'),
+                            ),
+                          ],
+                          child: Container(
+                            padding: const EdgeInsets.all(6),
+                            decoration: BoxDecoration(
+                              color: Colors.black.withAlpha(110),
+                              borderRadius: BorderRadius.circular(999),
+                            ),
+                            child: const Icon(
+                              Icons.more_vert,
+                              color: Colors.white,
+                              size: 18,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 10, 12, 12),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
                         item.name,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
                         style: const TextStyle(fontWeight: FontWeight.bold),
                       ),
+                      const SizedBox(height: 4),
                       Text(
                         "Rp ${item.price}",
                         style: const TextStyle(color: Colors.orange),
@@ -218,15 +351,6 @@ Widget _header() {
                     ],
                   ),
                 ),
-                GestureDetector(
-                  onTap: () => _showEditModal(item),
-                  child: const Icon(Icons.edit, color: Colors.blue),
-                ),
-                const SizedBox(width: 10),
-                GestureDetector(
-                  onTap: () => _deleteItem(item),
-                  child: const Icon(Icons.delete, color: Colors.red),
-                ),
               ],
             ),
           );
@@ -241,7 +365,6 @@ Widget _header() {
     final name = TextEditingController();
     final price = TextEditingController();
     final stock = TextEditingController();
-    final emoji = TextEditingController();
 
     String category = "Coffee";
 
@@ -249,13 +372,13 @@ Widget _header() {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) {
+      builder: (sheetContext) {
         return Container(
           padding: EdgeInsets.fromLTRB(
             16,
             16,
             16,
-            MediaQuery.of(context).viewInsets.bottom + 16,
+            MediaQuery.of(sheetContext).viewInsets.bottom + 16,
           ),
           decoration: const BoxDecoration(
             color: Colors.white,
@@ -263,6 +386,10 @@ Widget _header() {
           ),
           child: StatefulBuilder(
             builder: (context, setStateModal) {
+              final previewName =
+                  name.text.trim().isEmpty ? "Menu Preview" : name.text.trim();
+              final previewIndex = menuItems.length.clamp(0, 11);
+
               return SingleChildScrollView(
                 child: Form(
                   key: formKey,
@@ -278,6 +405,16 @@ Widget _header() {
                         ),
                       ),
                       const SizedBox(height: 16),
+                      Center(
+                        child: _buildMenuImage(
+                          menuName: previewName,
+                          index: previewIndex,
+                          width: 120,
+                          height: 120,
+                          borderRadius: 20,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
                       const Text(
                         "Item Name",
                         style: TextStyle(fontSize: 12, color: Colors.grey),
@@ -285,6 +422,7 @@ Widget _header() {
                       const SizedBox(height: 6),
                       TextFormField(
                         controller: name,
+                        onChanged: (_) => setStateModal(() {}),
                         decoration: _inputStyle("e.g., Americano"),
                         validator: (value) {
                           if ((value ?? '').trim().isEmpty) {
@@ -422,22 +560,12 @@ Widget _header() {
                           ),
                         ],
                       ),
-                      const SizedBox(height: 14),
-                      const Text(
-                        "Emoji Icon",
-                        style: TextStyle(fontSize: 12, color: Colors.grey),
-                      ),
-                      const SizedBox(height: 6),
-                      TextFormField(
-                        controller: emoji,
-                        decoration: _inputStyle("☕"),
-                      ),
                       const SizedBox(height: 20),
                       Row(
                         children: [
                           Expanded(
                             child: OutlinedButton(
-                              onPressed: () => Navigator.pop(context),
+                              onPressed: () => Navigator.pop(sheetContext),
                               style: OutlinedButton.styleFrom(
                                 padding:
                                     const EdgeInsets.symmetric(vertical: 14),
@@ -453,7 +581,7 @@ Widget _header() {
                             child: ElevatedButton(
                               onPressed: () async {
                                 if (!formKey.currentState!.validate()) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
+                                  ScaffoldMessenger.of(sheetContext).showSnackBar(
                                     const SnackBar(
                                       content: Text(
                                         'Mohon isi semua field dengan benar',
@@ -470,14 +598,15 @@ Widget _header() {
                                       price: int.parse(price.text.trim()),
                                       category: category,
                                       stock: int.parse(stock.text.trim()),
-                                      emoji: emoji.text.trim(),
+                                      emoji: '☕',
                                     ),
                                   );
 
                                   if (!mounted) return;
-                                  Navigator.pop(context);
+                                  Navigator.pop(sheetContext);
                                   await loadMenus();
 
+                                  if (!mounted) return;
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     const SnackBar(
                                       content: Text("Menu berhasil ditambahkan"),
@@ -517,13 +646,12 @@ Widget _header() {
     );
   }
 
-  void _showEditModal(MenuItemModel item) {
+  void _showEditModal(MenuItemModel item, int index) {
     final formKey = GlobalKey<FormState>();
 
     final name = TextEditingController(text: item.name);
     final price = TextEditingController(text: item.price.toString());
     final stock = TextEditingController(text: item.stock.toString());
-    final emoji = TextEditingController(text: item.emoji);
 
     String category = item.category;
 
@@ -531,13 +659,13 @@ Widget _header() {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) {
+      builder: (sheetContext) {
         return Container(
           padding: EdgeInsets.fromLTRB(
             16,
             16,
             16,
-            MediaQuery.of(context).viewInsets.bottom + 16,
+            MediaQuery.of(sheetContext).viewInsets.bottom + 16,
           ),
           decoration: const BoxDecoration(
             color: Colors.white,
@@ -545,6 +673,9 @@ Widget _header() {
           ),
           child: StatefulBuilder(
             builder: (context, setStateModal) {
+              final previewName =
+                  name.text.trim().isEmpty ? item.name : name.text.trim();
+
               return SingleChildScrollView(
                 child: Form(
                   key: formKey,
@@ -560,6 +691,16 @@ Widget _header() {
                         ),
                       ),
                       const SizedBox(height: 16),
+                      Center(
+                        child: _buildMenuImage(
+                          menuName: previewName,
+                          index: index,
+                          width: 120,
+                          height: 120,
+                          borderRadius: 20,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
                       const Text(
                         "Item Name",
                         style: TextStyle(fontSize: 12, color: Colors.grey),
@@ -567,6 +708,7 @@ Widget _header() {
                       const SizedBox(height: 6),
                       TextFormField(
                         controller: name,
+                        onChanged: (_) => setStateModal(() {}),
                         decoration: _inputStyle("e.g. Americano"),
                         validator: (value) {
                           if ((value ?? '').trim().isEmpty) {
@@ -704,22 +846,12 @@ Widget _header() {
                           ),
                         ],
                       ),
-                      const SizedBox(height: 14),
-                      const Text(
-                        "Emoji Icon",
-                        style: TextStyle(fontSize: 12, color: Colors.grey),
-                      ),
-                      const SizedBox(height: 6),
-                      TextFormField(
-                        controller: emoji,
-                        decoration: _inputStyle("☕"),
-                      ),
                       const SizedBox(height: 20),
                       Row(
                         children: [
                           Expanded(
                             child: OutlinedButton(
-                              onPressed: () => Navigator.pop(context),
+                              onPressed: () => Navigator.pop(sheetContext),
                               style: OutlinedButton.styleFrom(
                                 padding:
                                     const EdgeInsets.symmetric(vertical: 14),
@@ -735,7 +867,7 @@ Widget _header() {
                             child: ElevatedButton(
                               onPressed: () async {
                                 if (!formKey.currentState!.validate()) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
+                                  ScaffoldMessenger.of(sheetContext).showSnackBar(
                                     const SnackBar(
                                       content: Text(
                                         'Mohon isi semua field dengan benar',
@@ -747,22 +879,25 @@ Widget _header() {
 
                                 try {
                                   await _menuService.updateMenu(
-                                    item.id!,
+                                    item.id ?? '',
                                     MenuItemModel(
                                       id: item.id,
                                       name: name.text.trim(),
                                       price: int.parse(price.text.trim()),
                                       category: category,
                                       stock: int.parse(stock.text.trim()),
-                                      emoji: emoji.text.trim(),
+                                      emoji: item.emoji.isEmpty
+                                          ? '☕'
+                                          : item.emoji,
                                       createdAt: item.createdAt,
                                     ),
                                   );
 
                                   if (!mounted) return;
-                                  Navigator.pop(context);
+                                  Navigator.pop(sheetContext);
                                   await loadMenus();
 
+                                  if (!mounted) return;
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     const SnackBar(
                                       content: Text("Menu berhasil diupdate"),
@@ -804,12 +939,12 @@ Widget _header() {
   void _deleteItem(MenuItemModel item) {
     showDialog(
       context: context,
-      builder: (_) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         title: const Text("Delete Item"),
         content: Text("Are you sure you want to delete ${item.name}?"),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () => Navigator.pop(dialogContext),
             child: const Text("Cancel"),
           ),
           ElevatedButton(
@@ -818,9 +953,10 @@ Widget _header() {
                 await _menuService.deleteMenu(item.id!);
 
                 if (!mounted) return;
-                Navigator.pop(context);
+                Navigator.pop(dialogContext);
                 await loadMenus();
 
+                if (!mounted) return;
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(content: Text("Menu berhasil dihapus")),
                 );

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../widgets/header.dart';
 import '../../data/services/report_service.dart';
+import '../../data/services/stock_service.dart';
 import '../sales/sales_screen.dart';
 import '../reports/reports_screen.dart';
 import '../../utils/currency_formatter.dart';
@@ -16,6 +17,7 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   final ReportService _reportService = ReportService();
+  final StockService _stockService = StockService();
   final SupabaseClient supabase = Supabase.instance.client;
 
   bool isLoading = true;
@@ -29,11 +31,27 @@ class _HomeScreenState extends State<HomeScreen> {
 
   String? selectedGerobakId;
   List<Map<String, dynamic>> gerobakOptions = [];
+  String _role = 'owner';
+
+  bool get _isRider => _role == 'rider';
+
+  String get _selectedGerobakName {
+    if (gerobakOptions.isEmpty || selectedGerobakId == null) return '-';
+
+    final found = gerobakOptions.where(
+      (item) => item['id']?.toString() == selectedGerobakId,
+    );
+
+    if (found.isEmpty) return '-';
+    return found.first['nama_gerobak']?.toString() ?? '-';
+  }
 
   @override
   void initState() {
     super.initState();
     initDashboard();
+    print('AUTH USER ID: ${Supabase.instance.client.auth.currentUser?.id}');
+    print('AUTH USER EMAIL: ${Supabase.instance.client.auth.currentUser?.email}');
   }
 
   Future<void> initDashboard() async {
@@ -45,16 +63,13 @@ class _HomeScreenState extends State<HomeScreen> {
         });
       }
 
-      final data = await supabase
-          .from('gerobak')
-          .select('id, nama_gerobak')
-          .order('nama_gerobak');
-
-      final gerobaks = List<Map<String, dynamic>>.from(data);
+      final role = await _stockService.getCurrentUserRole();
+      final gerobaks = await _stockService.getGerobakOptionsByRole();
 
       if (gerobaks.isEmpty) {
         if (!mounted) return;
         setState(() {
+          _role = role;
           gerobakOptions = [];
           isLoading = false;
           errorMessage = 'Data gerobak kosong';
@@ -62,10 +77,11 @@ class _HomeScreenState extends State<HomeScreen> {
         return;
       }
 
-      selectedGerobakId ??= gerobaks.first['id']?.toString();
+      selectedGerobakId = gerobaks.first['id']?.toString();
 
       if (!mounted) return;
       setState(() {
+        _role = role;
         gerobakOptions = gerobaks;
       });
 
@@ -235,30 +251,45 @@ class _HomeScreenState extends State<HomeScreen> {
             AppHeader(
               subtitle: _getTodayText(),
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 12,
+                ),
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(14),
                 ),
-                child: DropdownButton<String>(
-                  isExpanded: true,
-                  underline: const SizedBox(),
-                  value: selectedGerobakId,
-                  items: gerobakOptions.map((item) {
-                    return DropdownMenuItem<String>(
-                      value: item['id']?.toString(),
-                      child: Text(item['nama_gerobak']?.toString() ?? '-'),
-                    );
-                  }).toList(),
-                  onChanged: (value) async {
-                    if (value == null) return;
-                    setState(() => selectedGerobakId = value);
-                    await loadDashboard();
-                  },
-                ),
+                child: _isRider
+                    ? Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              _selectedGerobakName,
+                              style: const TextStyle(fontSize: 16),
+                            ),
+                          ),
+                        ],
+                      )
+                    : DropdownButton<String>(
+                        isExpanded: true,
+                        underline: const SizedBox(),
+                        value: selectedGerobakId,
+                        items: gerobakOptions.map((item) {
+                          return DropdownMenuItem<String>(
+                            value: item['id']?.toString(),
+                            child: Text(
+                              item['nama_gerobak']?.toString() ?? '-',
+                            ),
+                          );
+                        }).toList(),
+                        onChanged: (value) async {
+                          if (value == null) return;
+                          setState(() => selectedGerobakId = value);
+                          await loadDashboard();
+                        },
+                      ),
               ),
             ),
-
             if (lowStockCount > 0)
               Padding(
                 padding:
@@ -283,9 +314,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 ),
               ),
-
             const SizedBox(height: 16),
-
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 14),
               child: Column(
@@ -305,28 +334,32 @@ class _HomeScreenState extends State<HomeScreen> {
                     child: Row(
                       children: [
                         Expanded(
-                          child: _miniStat(
-                            "Sales",
-                            formatRupiah(totalRevenue),
-                            Icons.payments,
-                            Colors.orange,
-                          ),                       
+                          child: GestureDetector(
+                            onTap: _openSalesScreen,
+                            child: _miniStat(
+                              "Sales",
+                              formatRupiah(totalRevenue),
+                              Icons.payments,
+                              Colors.orange,
+                            ),
                           ),
+                        ),
                         const SizedBox(width: 12),
                         Expanded(
-                          child: _miniStat(
-                            "Orders",
-                            "$totalOrders",
-                            Icons.receipt_long,
-                            Colors.amber,
+                          child: GestureDetector(
+                            onTap: _openReportsScreen,
+                            child: _miniStat(
+                              "Orders",
+                              "$totalOrders",
+                              Icons.receipt_long,
+                              Colors.amber,
+                            ),
                           ),
                         ),
                       ],
                     ),
                   ),
-
                   const SizedBox(height: 16),
-
                   _sectionCard(
                     "Top Selling Items",
                     topSellingItems.isEmpty
@@ -416,9 +449,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             }).toList(),
                           ),
                   ),
-
                   const SizedBox(height: 14),
-
                   _sectionCard(
                     "Recent Sales",
                     recentSales.isEmpty
@@ -498,7 +529,6 @@ class _HomeScreenState extends State<HomeScreen> {
                 ],
               ),
             ),
-
             const SizedBox(height: 20),
           ],
         ),

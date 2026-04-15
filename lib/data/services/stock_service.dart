@@ -3,10 +3,70 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 class StockService {
   final SupabaseClient supabase = Supabase.instance.client;
 
+  Future<String> getCurrentUserRole() async {
+    final user = supabase.auth.currentUser;
+    if (user == null) return 'owner';
+
+    final profile = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', user.id)
+        .maybeSingle();
+
+    return (profile?['role'] ?? 'owner').toString().toLowerCase();
+  }
+
   Future<List<Map<String, dynamic>>> getGerobakOptions() async {
     final response = await supabase
         .from('gerobak')
-        .select('id, nama_gerobak')
+        .select('id, nama_gerobak, rider_id')
+        .order('nama_gerobak');
+
+    return List<Map<String, dynamic>>.from(response);
+  }
+
+  Future<List<Map<String, dynamic>>> getGerobakOptionsByRole() async {
+    final user = supabase.auth.currentUser;
+
+    if (user == null) {
+      final response = await supabase
+          .from('gerobak')
+          .select('id, nama_gerobak, rider_id')
+          .order('nama_gerobak');
+
+      return List<Map<String, dynamic>>.from(response);
+    }
+
+    final role = await getCurrentUserRole();
+
+    if (role == 'rider') {
+      final rider = await supabase
+          .from('riders')
+          .select('id')
+          .eq('profile_id', user.id)
+          .maybeSingle();
+
+      if (rider == null) {
+        return [];
+      }
+
+      final riderId = rider['id']?.toString();
+      if (riderId == null || riderId.isEmpty) {
+        return [];
+      }
+
+      final response = await supabase
+          .from('gerobak')
+          .select('id, nama_gerobak, rider_id')
+          .eq('rider_id', riderId)
+          .order('nama_gerobak');
+
+      return List<Map<String, dynamic>>.from(response);
+    }
+
+    final response = await supabase
+        .from('gerobak')
+        .select('id, nama_gerobak, rider_id')
         .order('nama_gerobak');
 
     return List<Map<String, dynamic>>.from(response);
@@ -15,8 +75,7 @@ class StockService {
   Future<List<Map<String, dynamic>>> getStocksByGerobak(String gerobakId) async {
     final response = await supabase
         .from('stok_gerobak')
-        .select(
-          '''
+        .select('''
           id,
           gerobak_id,
           menu_id,
@@ -31,8 +90,7 @@ class StockService {
             emoji,
             created_at
           )
-          ''',
-        )
+        ''')
         .eq('gerobak_id', gerobakId)
         .order('created_at', ascending: false);
 
@@ -75,7 +133,6 @@ class StockService {
 
     if (existing == null) {
       await supabase.from('stok_gerobak').insert({
-        'id': null,
         'menu_id': menuId,
         'gerobak_id': gerobakId,
         'stok_awal': stock,
@@ -154,49 +211,5 @@ class StockService {
         'stok_saat_ini': stock,
       });
     }
-  }
-
-  Future<String> getCurrentUserRole() async {
-  final user = supabase.auth.currentUser;
-  if (user == null) return 'owner';
-
-  final profile = await supabase
-      .from('profiles')
-      .select('role')
-      .eq('id', user.id)
-      .maybeSingle();
-
-  return (profile?['role'] ?? 'owner').toString().toLowerCase();
-}
-
-  Future<List<Map<String, dynamic>>> getGerobakOptionsByRole() async {
-    final user = supabase.auth.currentUser;
-    if (user == null) {
-      final response = await supabase
-          .from('gerobak')
-          .select('id, nama_gerobak, rider_id')
-          .order('nama_gerobak');
-
-      return List<Map<String, dynamic>>.from(response);
-    }
-
-    final role = await getCurrentUserRole();
-
-    if (role == 'rider') {
-      final response = await supabase
-          .from('gerobak')
-          .select('id, nama_gerobak, rider_id')
-          .eq('rider_id', user.id)
-          .order('nama_gerobak');
-
-      return List<Map<String, dynamic>>.from(response);
-    }
-
-    final response = await supabase
-        .from('gerobak')
-        .select('id, nama_gerobak, rider_id')
-        .order('nama_gerobak');
-
-    return List<Map<String, dynamic>>.from(response);
   }
 }
