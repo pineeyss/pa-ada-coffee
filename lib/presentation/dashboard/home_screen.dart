@@ -305,26 +305,20 @@ class _HomeScreenState extends State<HomeScreen> {
                     child: Row(
                       children: [
                         Expanded(
-                          child: GestureDetector(
-                            onTap: _openSalesScreen,
-                            child: _miniStat(
-                              "Sales",
-                              formatRupiah(totalRevenue),
-                              Icons.payments,
-                              Colors.orange,
-                            ),
+                          child: _miniStat(
+                            "Sales",
+                            formatRupiah(totalRevenue),
+                            Icons.payments,
+                            Colors.orange,
+                          ),                       
                           ),
-                        ),
                         const SizedBox(width: 12),
                         Expanded(
-                          child: GestureDetector(
-                            onTap: _openReportsScreen,
-                            child: _miniStat(
-                              "Orders",
-                              "$totalOrders",
-                              Icons.receipt_long,
-                              Colors.amber,
-                            ),
+                          child: _miniStat(
+                            "Orders",
+                            "$totalOrders",
+                            Icons.receipt_long,
+                            Colors.amber,
                           ),
                         ),
                       ],

@@ -11,9 +11,12 @@ class LoginPage extends StatefulWidget {
 
   @override
   State<LoginPage> createState() => _LoginPageState();
+  
 }
 
 class _LoginPageState extends State<LoginPage> {
+  String? emailError;
+  String? passwordError;
   final emailController = TextEditingController();
   final passwordController = TextEditingController();
 
@@ -23,11 +26,25 @@ class _LoginPageState extends State<LoginPage> {
   bool obscurePassword = true;
 
   Future<void> login() async {
-    if (emailController.text.trim().isEmpty ||
-        passwordController.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Email dan password wajib diisi')),
-      );
+    final email = emailController.text.trim();
+    final password = passwordController.text.trim();
+
+    setState(() {
+      emailError = null;
+      passwordError = null;
+    });
+
+    if (email.isEmpty) {
+      setState(() {
+        emailError = "Email wajib diisi";
+      });
+      return;
+    }
+
+    if (password.isEmpty) {
+      setState(() {
+        passwordError = "Password wajib diisi";
+      });
       return;
     }
 
@@ -70,14 +87,19 @@ class _LoginPageState extends State<LoginPage> {
       }
     } on AuthException catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Login gagal: ${e.message}')),
-      );
+
+        setState(() {
+          emailError = "Email salah";
+          passwordError = "Password salah";
+        });
+
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: $e')),
-      );
+
+      setState(() {
+        passwordError = "Terjadi kesalahan";
+      });
+
     } finally {
       if (!mounted) return;
       setState(() => isLoading = false);
@@ -153,120 +175,187 @@ class _LoginPageState extends State<LoginPage> {
     super.dispose();
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF8F5F2),
-      body: SafeArea(
-        child: SingleChildScrollView(
-          child: Column(
-            children: [
-              AppHeader(
-                subtitle: _getTodayText(),
-              ),
-              Transform.translate(
-                offset: const Offset(0, -16),
-                child: Container(
-                  margin: const EdgeInsets.symmetric(horizontal: 16),
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(24),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withAlpha(18),
-                        blurRadius: 18,
-                        offset: const Offset(0, 8),
+@override
+Widget build(BuildContext context) {
+  return Scaffold(
+    backgroundColor: const Color(0xFFF8F5F2),
+    body: SafeArea(
+      child: SingleChildScrollView(
+        child: Column(
+          children: [
+            AppHeader(
+              subtitle: _getTodayText(),
+            ),
+            Transform.translate(
+              offset: const Offset(0, -16),
+              child: Container(
+                margin: const EdgeInsets.symmetric(horizontal: 16),
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(24),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withAlpha(18),
+                      blurRadius: 18,
+                      offset: const Offset(0, 8),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      "Login Account",
+                      style: TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.black87,
                       ),
-                    ],
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        "Login Account",
-                        style: TextStyle(
-                          fontSize: 22,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.black87,
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      "Masuk untuk lanjut ke dashboard",
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: Colors.grey.shade600,
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+
+                    // EMAIL
+                    TextField(
+                      controller: emailController,
+                      keyboardType: TextInputType.emailAddress,
+                      textInputAction: TextInputAction.next,
+
+                      onChanged: (_) {
+                        if (emailError != null) {
+                          setState(() => emailError = null);
+                        }
+                      },
+
+                      decoration: inputStyle(
+                        hint: "Masukkan email",
+                        prefix: Icons.email_outlined,
+                      ).copyWith(
+                        errorText: emailError,
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(16),
+                          borderSide: BorderSide(
+                            color: emailError != null
+                                ? Colors.red
+                                : Colors.grey.shade200,
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        "Masuk untuk lanjut ke dashboard",
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: Colors.grey.shade600,
-                        ),
-                      ),
-                      const SizedBox(height: 20),
-                      TextField(
-                        controller: emailController,
-                        keyboardType: TextInputType.emailAddress,
-                        decoration: inputStyle(
-                          hint: "Masukkan email",
-                          prefix: Icons.email_outlined,
-                        ),
-                      ),
-                      const SizedBox(height: 14),
-                      TextField(
-                        controller: passwordController,
-                        obscureText: obscurePassword,
-                        decoration: inputStyle(
-                          hint: "Masukkan password",
-                          prefix: Icons.lock_outline,
-                          suffix: IconButton(
-                            onPressed: () {
-                              setState(() {
-                                obscurePassword = !obscurePassword;
-                              });
-                            },
-                            icon: Icon(
-                              obscurePassword
-                                  ? Icons.visibility_off_outlined
-                                  : Icons.visibility_outlined,
-                              color: Colors.grey.shade600,
-                            ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(16),
+                          borderSide: BorderSide(
+                            color: emailError != null
+                                ? Colors.red
+                                : Colors.orange,
+                            width: 1.5,
                           ),
                         ),
                       ),
-                      const SizedBox(height: 20),
-                      AppButton(
-                        text: "Login",
-                        onPressed: login,
-                        isLoading: isLoading,
-                      ),
-                      const SizedBox(height: 14),
-                      Center(
-                        child: TextButton(
+                    ),
+
+                    const SizedBox(height: 14),
+
+                    // PASSWORD
+                    TextField(
+                      controller: passwordController,
+                      obscureText: obscurePassword,
+                      textInputAction: TextInputAction.done,
+
+                      onChanged: (_) {
+                        if (passwordError != null) {
+                          setState(() => passwordError = null);
+                        }
+                      },
+
+                      onSubmitted: (_) {
+                        if (!isLoading) login();
+                      },
+
+                      decoration: inputStyle(
+                        hint: "Masukkan password",
+                        prefix: Icons.lock_outline,
+                        suffix: IconButton(
                           onPressed: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => const RegisterPage(),
-                              ),
-                            );
+                            setState(() {
+                              obscurePassword = !obscurePassword;
+                            });
                           },
-                          style: TextButton.styleFrom(
-                            foregroundColor: Colors.orange,
+                          icon: Icon(
+                            obscurePassword
+                                ? Icons.visibility_off_outlined
+                                : Icons.visibility_outlined,
+                            color: Colors.grey.shade600,
                           ),
-                          child: const Text(
-                            "Belum punya akun? Register",
-                            style: TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w600,
-                            ),
+                        ),
+                      ).copyWith(
+                        errorText: passwordError,
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(16),
+                          borderSide: BorderSide(
+                            color: passwordError != null
+                                ? Colors.red
+                                : Colors.grey.shade200,
+                          ),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(16),
+                          borderSide: BorderSide(
+                            color: passwordError != null
+                                ? Colors.red
+                                : Colors.orange,
+                            width: 1.5,
                           ),
                         ),
                       ),
-                    ],
-                  ),
+                    ),
+
+                    const SizedBox(height: 20),
+
+                    AppButton(
+                      text: "Login",
+                      onPressed: login,
+                      isLoading: isLoading,
+                    ),
+
+                    const SizedBox(height: 14),
+
+                    Center(
+                      child: TextButton(
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => const RegisterPage(),
+                            ),
+                          );
+                        },
+                        style: TextButton.styleFrom(
+                          foregroundColor: Colors.orange,
+                        ),
+                        child: const Text(
+                          "Belum punya akun? Register",
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 }

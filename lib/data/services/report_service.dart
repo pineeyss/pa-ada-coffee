@@ -73,6 +73,50 @@ class ReportService {
     return response.length;
   }
 
+Future<int> getWeeklyRevenue({
+  required String? gerobakId,
+}) async {
+  if (gerobakId == null) return 0;
+
+  final now = DateTime.now();
+  final sevenDaysAgo = now.subtract(const Duration(days: 7));
+
+  final response = await supabase
+      .from('transaksi')
+      .select('total_harga, tanggal')
+      .eq('gerobak_id', gerobakId)
+      .gte('tanggal', sevenDaysAgo.toIso8601String());
+
+  final data = List<Map<String, dynamic>>.from(response);
+
+  int total = 0;
+
+  for (var item in data) {
+  total += (item['total_harga'] as num?)?.toInt() ?? 0;
+  }
+
+  return total;
+}
+
+Future<int> getWeeklyOrders({
+  required String? gerobakId,
+}) async {
+  if (gerobakId == null) return 0;
+
+  final now = DateTime.now();
+  final sevenDaysAgo = now.subtract(const Duration(days: 7));
+
+  final response = await supabase
+      .from('transaksi')
+      .select('id, tanggal')
+      .eq('gerobak_id', gerobakId)
+      .gte('tanggal', sevenDaysAgo.toIso8601String());
+
+  final data = List<Map<String, dynamic>>.from(response);
+
+  return data.length;
+}
+
   Future<List<Map<String, dynamic>>> getTopSellingItems({
     String? gerobakId,
     int days = 1,

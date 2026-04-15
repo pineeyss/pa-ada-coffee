@@ -15,6 +15,7 @@ class ReportsScreen extends StatefulWidget {
 class _ReportsScreenState extends State<ReportsScreen> {
   final ReportService _reportService = ReportService();
   final SupabaseClient supabase = Supabase.instance.client;
+  
 
   bool isLoading = true;
   String? errorMessage;
@@ -22,9 +23,10 @@ class _ReportsScreenState extends State<ReportsScreen> {
   int totalRevenue = 0;
   int totalOrders = 0;
   int averageOrderValue = 0;
+  int weeklyRevenue = 0;
+  int weeklyOrders = 0;
 
-  List<Map<String, dynamic>> topSellingItems = [];
-  List<Map<String, dynamic>> recentSales = [];
+
   List<Map<String, dynamic>> gerobakOptions = [];
 
   String? selectedGerobakId;
@@ -91,22 +93,22 @@ class _ReportsScreenState extends State<ReportsScreen> {
         gerobakId: selectedGerobakId,
       );
 
-      final topItems = await _reportService.getTopSellingItems(
-        gerobakId: selectedGerobakId,
-      );
+      final weeklyRev = await _reportService.getWeeklyRevenue(
+  gerobakId: selectedGerobakId,
+);
 
-      final recent = await _reportService.getRecentSales(
-        gerobakId: selectedGerobakId,
-      );
+final weeklyOrd = await _reportService.getWeeklyOrders(
+  gerobakId: selectedGerobakId,
+);
 
-      setState(() {
-        totalRevenue = revenue;
-        totalOrders = orders;
-        averageOrderValue = orders > 0 ? (revenue / orders).round() : 0;
-        topSellingItems = topItems;
-        recentSales = recent;
-        isLoading = false;
-      });
+    setState(() {
+      totalRevenue = revenue;
+      totalOrders = orders;
+      weeklyRevenue = weeklyRev;
+      weeklyOrders = weeklyOrd;
+      averageOrderValue = orders > 0 ? (revenue / orders).round() : 0;
+      isLoading = false;
+    });
     } catch (e) {
       setState(() {
         isLoading = false;
@@ -285,217 +287,40 @@ class _ReportsScreenState extends State<ReportsScreen> {
                             ),
                           ),
                         ),
-                        const SizedBox(height: 12),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 12),
-                          child: _buildSectionCard(
-                            title: "Weekly Snapshot",
-                            child: Row(
-                              children: [
-                                Expanded(
-                                  child: _buildMiniStat(
-                                    label: "Top Items",
-                                    value: "${topSellingItems.length}",
-                                    color: Colors.brown,
-                                  ),
-                                ),
-                                const SizedBox(width: 10),
-                                Expanded(
-                                  child: _buildMiniStat(
-                                    label: "Recent Sales",
-                                    value: "${recentSales.length}",
-                                    color: Colors.deepOrange,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 12),
-                          child: _buildSectionCard(
-                            title: "Top Selling Items",
-                            child: topSellingItems.isEmpty
-                                ? const EmptyState(
-                                    icon: Icons.local_cafe_outlined,
-                                    title: "Belum ada data penjualan",
-                                    subtitle:
-                                        "Data top selling item akan muncul setelah transaksi masuk.",
-                                  )
-                                : Column(
-                                    children: topSellingItems
-                                        .take(5)
-                                        .toList()
-                                        .asMap()
-                                        .entries
-                                        .map((entry) {
-                                      final index = entry.key;
-                                      final item = entry.value;
-
-                                      final itemName =
-                                          item['name']?.toString() ?? '-';
-                                      final qty = (item['qty'] ?? 0) as int;
-                                      final revenue =
-                                          (item['revenue'] ?? 0) as int;
-
-                                      return Container(
-                                        margin:
-                                            const EdgeInsets.only(bottom: 10),
-                                        padding: const EdgeInsets.all(12),
-                                        decoration: BoxDecoration(
-                                          color: Colors.orange.withAlpha(12),
-                                          borderRadius:
-                                              BorderRadius.circular(14),
-                                        ),
-                                        child: Row(
-                                          children: [
-                                            Container(
-                                              width: 28,
-                                              height: 28,
-                                              alignment: Alignment.center,
-                                              decoration: BoxDecoration(
-                                                color: Colors.orange,
-                                                borderRadius:
-                                                    BorderRadius.circular(10),
-                                              ),
-                                              child: Text(
-                                                "${index + 1}",
-                                                style: const TextStyle(
-                                                  color: Colors.white,
-                                                  fontWeight: FontWeight.bold,
-                                                  fontSize: 12,
-                                                ),
-                                              ),
-                                            ),
-                                            const SizedBox(width: 10),
-                                            Expanded(
-                                              child: Text(
-                                                itemName,
-                                                style: const TextStyle(
-                                                  fontWeight: FontWeight.w600,
-                                                ),
-                                              ),
-                                            ),
-                                            Column(
-                                              crossAxisAlignment:
-                                                  CrossAxisAlignment.end,
-                                              children: [
-                                                Text(
-                                                  "$qty sold",
-                                                  style: const TextStyle(
-                                                    fontSize: 12,
-                                                    color: Colors.black54,
-                                                  ),
-                                                ),
-                                                const SizedBox(height: 2),
-                                                Text(
-                                                  formatRupiah(revenue),
-                                                  style: const TextStyle(
-                                                    fontSize: 12,
-                                                    color: Colors.orange,
-                                                    fontWeight: FontWeight.bold,
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                          ],
-                                        ),
-                                      );
-                                    }).toList(),
-                                  ),
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 12),
-                          child: _buildSectionCard(
-                            title: "Recent Sales",
-                            child: recentSales.isEmpty
-                                ? const EmptyState(
-                                    icon: Icons.receipt_long_outlined,
-                                    title: "Belum ada transaksi terbaru",
-                                    subtitle:
-                                        "Riwayat transaksi akan tampil di sini setelah ada penjualan.",
-                                  )
-                                : Column(
-                                    children: recentSales.take(6).map((sale) {
-                                      final menuName =
-                                          sale['menu_name']?.toString() ?? '-';
-                                      final qty = (sale['qty'] ?? 0) as int;
-                                      final total =
-                                          (sale['total_harga'] ?? 0) as int;
-
-                                      return Container(
-                                        margin:
-                                            const EdgeInsets.only(bottom: 10),
-                                        padding: const EdgeInsets.all(12),
-                                        decoration: BoxDecoration(
-                                          color: Colors.grey.shade50,
-                                          borderRadius:
-                                              BorderRadius.circular(14),
-                                        ),
-                                        child: Row(
-                                          children: [
-                                            Container(
-                                              width: 38,
-                                              height: 38,
-                                              decoration: BoxDecoration(
-                                                color: Colors.orange
-                                                    .withAlpha(16),
-                                                borderRadius:
-                                                    BorderRadius.circular(12),
-                                              ),
-                                              child: const Icon(
-                                                Icons.shopping_bag_outlined,
-                                                color: Colors.orange,
-                                              ),
-                                            ),
-                                            const SizedBox(width: 10),
-                                            Expanded(
-                                              child: Column(
-                                                crossAxisAlignment:
-                                                    CrossAxisAlignment.start,
-                                                children: [
-                                                  Text(
-                                                    menuName,
-                                                    style: const TextStyle(
-                                                      fontWeight:
-                                                          FontWeight.w600,
-                                                    ),
-                                                  ),
-                                                  const SizedBox(height: 2),
-                                                  Text(
-                                                    "$qty item",
-                                                    style: const TextStyle(
-                                                      fontSize: 12,
-                                                      color: Colors.black54,
-                                                    ),
-                                                  ),
-                                                ],
-                                              ),
-                                            ),
-                                            Text(
-                                              formatRupiah(total),
-                                              style: const TextStyle(
-                                                color: Colors.orange,
-                                                fontWeight: FontWeight.bold,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      );
-                                    }).toList(),
-                                  ),
-                          ),
-                        ),
                         const SizedBox(height: 20),
-                      ],
-                    ),
-                  ),
-                ),
-    );
-  }
+                        Padding(
+  padding: const EdgeInsets.symmetric(horizontal: 12),
+  child: _buildSectionCard(
+    title: "Weekly Snapshot",
+    child: Row(
+      children: [
+        Expanded(
+          child: _buildMiniStat(
+            label: "Revenue",
+            value: formatRupiah(weeklyRevenue),
+            color: Colors.orange,
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: _buildMiniStat(
+            label: "Orders",
+            value: "$weeklyOrders",
+            color: Colors.amber.shade700,
+          ),
+        ),
+      ],
+    ),
+  ),
+),
+const SizedBox(height: 20),                      
+                        ],
+                        ),
+                        ),
+                        ),
+                            );
+                          }
+                          
 
   Widget _buildSummaryCard({
     required IconData icon,
