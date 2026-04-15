@@ -41,7 +41,7 @@ class AppHeader extends StatelessWidget {
               child: Opacity(
                 opacity: 0.035,
                 child: Image.asset(
-                  'lib/assets/images/background.png',
+                  'assets/images/background.png',
                   fit: BoxFit.cover,
                   alignment: Alignment.center,
                 ),
@@ -57,7 +57,7 @@ class AppHeader extends StatelessWidget {
                     const SizedBox(height: 4),
                   ],
                   Image.asset(
-                    'lib/assets/images/logo.png',
+                    'assets/images/logo.png',
                     width: 130,
                     fit: BoxFit.contain,
                   ),

@@ -20,12 +20,26 @@ class _StockScreenState extends State<StockScreen> {
   List<Map<String, dynamic>> gerobak = [];
 
   String? selectedGerobak;
+  String _role = 'owner';
 
   String searchQuery = "";
   String selectedCategory = "All";
   bool isLoading = true;
 
   final categories = ["All", "Coffee", "Signature", "Premium", "Non Coffee"];
+
+  bool get _isRider => _role == 'rider';
+
+  String get _selectedGerobakName {
+    if (gerobak.isEmpty || selectedGerobak == null) return '-';
+
+    final found = gerobak.where(
+      (item) => item['id']?.toString() == selectedGerobak,
+    );
+
+    if (found.isEmpty) return '-';
+    return found.first['nama_gerobak']?.toString() ?? '-';
+  }
 
   List<Map<String, dynamic>> get filteredData {
     return data.where((item) {
@@ -52,11 +66,13 @@ class _StockScreenState extends State<StockScreen> {
     try {
       setState(() => isLoading = true);
 
+      final role = await _stockService.getCurrentUserRole();
       final gerobakOptions = await _stockService.getGerobakOptionsByRole();
-      
+
       if (gerobakOptions.isEmpty) {
         if (!mounted) return;
         setState(() {
+          _role = role;
           gerobak = [];
           selectedGerobak = null;
           data = [];
@@ -65,10 +81,11 @@ class _StockScreenState extends State<StockScreen> {
         return;
       }
 
-      selectedGerobak ??= gerobakOptions.first['id']?.toString();
+      selectedGerobak = gerobakOptions.first['id']?.toString();
 
       if (!mounted) return;
       setState(() {
+        _role = role;
         gerobak = gerobakOptions;
       });
 
@@ -121,23 +138,9 @@ class _StockScreenState extends State<StockScreen> {
     if (!ok) return;
 
     try {
-      // Hapus stok terkait dulu
-      await supabase
-          .from('stok_gerobak')
-          .delete()
-          .eq('menu_id', menu['id']);
-
-      // Hapus detail transaksi kalau perlu
-      await supabase
-          .from('detail_transaksi')
-          .delete()
-          .eq('menu_id', menu['id']);
-
-      // Hapus menu
-      await supabase
-          .from('menu')
-          .delete()
-          .eq('id', menu['id']);
+      await supabase.from('stok_gerobak').delete().eq('menu_id', menu['id']);
+      await supabase.from('detail_transaksi').delete().eq('menu_id', menu['id']);
+      await supabase.from('menu').delete().eq('id', menu['id']);
 
       await load();
 
@@ -313,21 +316,15 @@ class _StockScreenState extends State<StockScreen> {
                             final int parsedStock =
                                 int.tryParse(stock.text.trim()) ?? 0;
 
-                            final menuInsert = await supabase
-                                .from('menu')
-                                .insert({
-                                  'name': name.text.trim(),
-                                  'category': category,
-                                  'price': parsedPrice,
-                                  'stock': parsedStock,
-                                  'emoji': emoji.text.trim().isEmpty
-                                      ? '☕'
-                                      : emoji.text.trim(),
-                                })
-                                .select()
-                                .single();
-
-                            final menuId = menuInsert['id'];
+                            await supabase.from('menu').insert({
+                              'name': name.text.trim(),
+                              'category': category,
+                              'price': parsedPrice,
+                              'stock': parsedStock,
+                              'emoji': emoji.text.trim().isEmpty
+                                  ? '☕'
+                                  : emoji.text.trim(),
+                            });
 
                             if (!mounted) return;
                             Navigator.pop(context);
@@ -470,17 +467,14 @@ class _StockScreenState extends State<StockScreen> {
                           if (!ok) return;
 
                           try {
-                            await supabase
-                                .from('menu')
-                                .update({
-                                  'name': name.text.trim(),
-                                  'category': category,
-                                  'price': int.tryParse(price.text.trim()) ?? 0,
-                                  'emoji': emoji.text.trim().isEmpty
-                                      ? '☕'
-                                      : emoji.text.trim(),
-                                })
-                                .eq('id', menu['id']);
+                            await supabase.from('menu').update({
+                              'name': name.text.trim(),
+                              'category': category,
+                              'price': int.tryParse(price.text.trim()) ?? 0,
+                              'emoji': emoji.text.trim().isEmpty
+                                  ? '☕'
+                                  : emoji.text.trim(),
+                            }).eq('id', menu['id']);
 
                             if (!mounted) return;
                             Navigator.pop(context);
@@ -496,8 +490,7 @@ class _StockScreenState extends State<StockScreen> {
                             if (!mounted) return;
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(
-                                content: Text("Gagal update menu: $e"),
-                              ),
+                                content: Text("Gagal update menu: $e")),
                             );
                           }
                         },
@@ -568,13 +561,10 @@ class _StockScreenState extends State<StockScreen> {
                         if (!ok) return;
 
                         try {
-                          await supabase
-                              .from('stok_gerobak')
-                              .update({
-                                'stok_saat_ini':
-                                    int.tryParse(stock.text.trim()) ?? 0,
-                              })
-                              .eq('id', item['id']);
+                          await supabase.from('stok_gerobak').update({
+                            'stok_saat_ini':
+                                int.tryParse(stock.text.trim()) ?? 0,
+                          }).eq('id', item['id']);
 
                           if (!mounted) return;
                           Navigator.pop(context);
@@ -589,9 +579,7 @@ class _StockScreenState extends State<StockScreen> {
                         } catch (e) {
                           if (!mounted) return;
                           ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text("Gagal update stock: $e"),
-                            ),
+                            SnackBar(content: Text("Gagal update stock: $e")),
                           );
                         }
                       },
@@ -633,25 +621,48 @@ class _StockScreenState extends State<StockScreen> {
               children: [
                 AppHeader(
                   subtitle: "Stock",
-                  child: DropdownButton<String>(
-                    value: selectedGerobak,
-                    isExpanded: true,
-                    underline: const SizedBox(),
-                    items: gerobak
-                        .map(
-                          (e) => DropdownMenuItem<String>(
-                            value: e['id']?.toString(),
-                            child: Text(e['nama_gerobak']?.toString() ?? '-'),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 12,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: _isRider
+                        ? Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  _selectedGerobakName,
+                                  style: const TextStyle(fontSize: 16),
+                                ),
+                              ),
+                            ],
+                          )
+                        : DropdownButton<String>(
+                            value: selectedGerobak,
+                            isExpanded: true,
+                            underline: const SizedBox(),
+                            items: gerobak
+                                .map(
+                                  (e) => DropdownMenuItem<String>(
+                                    value: e['id']?.toString(),
+                                    child: Text(
+                                      e['nama_gerobak']?.toString() ?? '-',
+                                    ),
+                                  ),
+                                )
+                                .toList(),
+                            onChanged: (v) async {
+                              if (v == null) return;
+                              setState(() {
+                                selectedGerobak = v;
+                              });
+                              await load();
+                            },
                           ),
-                        )
-                        .toList(),
-                    onChanged: (v) async {
-                      if (v == null) return;
-                      setState(() {
-                        selectedGerobak = v;
-                      });
-                      await load();
-                    },
                   ),
                 ),
                 Padding(

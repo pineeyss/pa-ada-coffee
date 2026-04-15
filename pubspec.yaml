@@ -23,6 +23,12 @@ flutter:
   uses-material-design: true
 
   assets:
-    - lib/assets/images/logo.png
-    - lib/assets/images/background.png
-
+    - assets/images/logo.png
+    - assets/images/background.png
+    - assets/images/menu_01.png
+    - assets/images/menu_02.png
+    - assets/images/menu_03.png
+    - assets/images/menu_04.png
+    - assets/images/menu_05.png
+    - assets/images/menu_06.png
+    - assets/images/menu_07.png
