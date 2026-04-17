@@ -40,6 +40,7 @@ class _StockScreenState extends State<StockScreen> {
 
     if (found.isEmpty) return '-';
     return found.first['nama_gerobak']?.toString() ?? '-';
+    
   }
 
   void _handleSelectedGerobakChanged() {
