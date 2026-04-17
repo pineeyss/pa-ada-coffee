@@ -4,6 +4,7 @@ import '../../data/services/stock_service.dart';
 import '../../utils/currency_formatter.dart';
 import '../widgets/empty_state.dart';
 import '../widgets/header.dart';
+import '../../core/supabase/selected_gerobak_store.dart';
 
 class ReportsScreen extends StatefulWidget {
   const ReportsScreen({super.key});
@@ -42,58 +43,100 @@ class _ReportsScreenState extends State<ReportsScreen> {
     return found.first['nama_gerobak']?.toString() ?? '-';
   }
 
+  void _handleSelectedGerobakChanged() {
+    final newId = SelectedGerobakStore.selectedGerobakId;
+
+    if (newId == null || newId == selectedGerobakId) return;
+    if (!mounted) return;
+
+    setState(() {
+      selectedGerobakId = newId;
+    });
+
+    loadReports();
+  }
+
   @override
   void initState() {
     super.initState();
+    SelectedGerobakStore.selectedGerobak.addListener(
+    _handleSelectedGerobakChanged,
+  );
     initReports();
   }
 
+  @override
+void dispose() {
+  SelectedGerobakStore.selectedGerobak.removeListener(
+    _handleSelectedGerobakChanged,
+  );
+  super.dispose();
+}
+
   Future<void> initReports() async {
-    try {
-      if (mounted) {
-        setState(() {
-          isLoading = true;
-          errorMessage = null;
-        });
-      }
+  try {
+    if (mounted) {
+      setState(() {
+        isLoading = true;
+        errorMessage = null;
+      });
+    }
 
-      final role = await _stockService.getCurrentUserRole();
-      final gerobaks = await _stockService.getGerobakOptionsByRole();
+    final role = await _stockService.getCurrentUserRole();
+    final gerobaks = await _stockService.getGerobakOptionsByRole();
 
-      if (gerobaks.isEmpty) {
-        if (!mounted) return;
-        setState(() {
-          _role = role;
-          gerobakOptions = [];
-          selectedGerobakId = null;
-          totalRevenue = 0;
-          totalOrders = 0;
-          averageOrderValue = 0;
-          weeklyRevenue = 0;
-          weeklyOrders = 0;
-          isLoading = false;
-          errorMessage = 'Data gerobak kosong';
-        });
-        return;
-      }
-
-      selectedGerobakId = gerobaks.first['id']?.toString();
-
+    if (gerobaks.isEmpty) {
       if (!mounted) return;
       setState(() {
         _role = role;
-        gerobakOptions = gerobaks;
-      });
-
-      await loadReports();
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
+        gerobakOptions = [];
+        selectedGerobakId = null;
+        totalRevenue = 0;
+        totalOrders = 0;
+        averageOrderValue = 0;
+        weeklyRevenue = 0;
+        weeklyOrders = 0;
         isLoading = false;
-        errorMessage = 'Gagal load gerobak: $e';
+        errorMessage = 'Data gerobak kosong';
       });
+      return;
     }
+
+    // ✅ ambil dari Home
+    final storeId = SelectedGerobakStore.selectedGerobakId;
+
+    final selected = gerobaks.any(
+      (item) => item['id']?.toString() == storeId,
+    )
+        ? gerobaks.firstWhere(
+            (item) => item['id']?.toString() == storeId,
+          )
+        : gerobaks.first;
+
+    selectedGerobakId = selected['id']?.toString();
+
+    // ✅ kalau belum ada, set global
+    if (SelectedGerobakStore.selectedGerobak.value == null) {
+      SelectedGerobakStore.setGerobak(
+        GerobakItem.fromMap(selected),
+      );
+    }
+
+    if (!mounted) return;
+    setState(() {
+      _role = role;
+      gerobakOptions = gerobaks;
+    });
+
+    await loadReports();
+  } catch (e) {
+    if (!mounted) return;
+    setState(() {
+      isLoading = false;
+      errorMessage = 'Gagal load gerobak: $e';
+    });
   }
+}
 
   Future<void> loadReports() async {
     if (selectedGerobakId == null) {
@@ -228,8 +271,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
                               color: Colors.white,
                               borderRadius: BorderRadius.circular(12),
                             ),
-                            child: _isRider
-                                ? SizedBox(
+                            child: SizedBox(
                                     width: double.infinity,
                                     child: Padding(
                                       padding: const EdgeInsets.symmetric(
@@ -245,28 +287,6 @@ class _ReportsScreenState extends State<ReportsScreen> {
                                       ),
                                     ),
                                   )
-                                : DropdownButton<String>(
-                                    isExpanded: true,
-                                    underline: const SizedBox(),
-                                    value: selectedGerobakId,
-                                    items: gerobakOptions.map((item) {
-                                      return DropdownMenuItem<String>(
-                                        value: item['id']?.toString(),
-                                        child: Text(
-                                          item['nama_gerobak']?.toString() ?? '-',
-                                        ),
-                                      );
-                                    }).toList(),
-                                    onChanged: (value) async {
-                                      if (value == null) return;
-
-                                      setState(() {
-                                        selectedGerobakId = value;
-                                      });
-
-                                      await loadReports();
-                                    },
-                                  ),
                           ),
                         ),
                         const SizedBox(height: 12),

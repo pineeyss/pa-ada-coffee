@@ -4,6 +4,7 @@ import '../../data/services/stock_service.dart';
 import '../widgets/header.dart';
 import '../../core/app_constans.dart';
 import '../../utils/dialog_helper.dart';
+import '../../core/supabase/selected_gerobak_store.dart';
 
 class StockScreen extends StatefulWidget {
   const StockScreen({super.key});
@@ -41,6 +42,19 @@ class _StockScreenState extends State<StockScreen> {
     return found.first['nama_gerobak']?.toString() ?? '-';
   }
 
+  void _handleSelectedGerobakChanged() {
+  final newId = SelectedGerobakStore.selectedGerobakId;
+
+  if (newId == null || newId == selectedGerobak) return;
+  if (!mounted) return;
+
+  setState(() {
+    selectedGerobak = newId;
+  });
+
+  load();
+}
+
   List<Map<String, dynamic>> get filteredData {
     return data.where((item) {
       final menu = item['menu'] as Map<String, dynamic>? ?? {};
@@ -56,48 +70,79 @@ class _StockScreenState extends State<StockScreen> {
     }).toList();
   }
 
-  @override
-  void initState() {
-    super.initState();
-    init();
-  }
+ @override
+void initState() {
+  super.initState();
+
+  SelectedGerobakStore.selectedGerobak.addListener(
+    _handleSelectedGerobakChanged,
+  );
+
+  init();
+}
+
+@override
+void dispose() {
+  SelectedGerobakStore.selectedGerobak.removeListener(
+    _handleSelectedGerobakChanged,
+  );
+  super.dispose();
+}
 
   Future<void> init() async {
-    try {
-      setState(() => isLoading = true);
+  try {
+    setState(() => isLoading = true);
 
-      final role = await _stockService.getCurrentUserRole();
-      final gerobakOptions = await _stockService.getGerobakOptionsByRole();
+    final role = await _stockService.getCurrentUserRole();
+    final gerobakOptions = await _stockService.getGerobakOptionsByRole();
 
-      if (gerobakOptions.isEmpty) {
-        if (!mounted) return;
-        setState(() {
-          _role = role;
-          gerobak = [];
-          selectedGerobak = null;
-          data = [];
-          isLoading = false;
-        });
-        return;
-      }
-
-      selectedGerobak = gerobakOptions.first['id']?.toString();
-
+    if (gerobakOptions.isEmpty) {
       if (!mounted) return;
       setState(() {
         _role = role;
-        gerobak = gerobakOptions;
+        gerobak = [];
+        selectedGerobak = null;
+        data = [];
+        isLoading = false;
       });
+      return;
+    }
 
-      await load();
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => isLoading = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Gagal init stock: $e")),
+    // ✅ ambil dari Home (global store)
+    final storeId = SelectedGerobakStore.selectedGerobakId;
+
+    final selected = gerobakOptions.any(
+      (item) => item['id']?.toString() == storeId,
+    )
+        ? gerobakOptions.firstWhere(
+            (item) => item['id']?.toString() == storeId,
+          )
+        : gerobakOptions.first;
+
+    selectedGerobak = selected['id']?.toString();
+
+    // ✅ kalau belum ada, set ke global
+    if (SelectedGerobakStore.selectedGerobak.value == null) {
+      SelectedGerobakStore.setGerobak(
+        GerobakItem.fromMap(selected),
       );
     }
+
+    if (!mounted) return;
+    setState(() {
+      _role = role;
+      gerobak = gerobakOptions;
+    });
+
+    await load();
+  } catch (e) {
+    if (!mounted) return;
+    setState(() => isLoading = false);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text("Gagal init stock: $e")),
+    );
   }
+}
 
   Future<void> load() async {
     if (selectedGerobak == null) {
@@ -630,8 +675,7 @@ class _StockScreenState extends State<StockScreen> {
                       color: Colors.white,
                       borderRadius: BorderRadius.circular(14),
                     ),
-                    child: _isRider
-                        ? Row(
+                    child: Row(
                             children: [
                               Expanded(
                                 child: Text(
@@ -641,28 +685,6 @@ class _StockScreenState extends State<StockScreen> {
                               ),
                             ],
                           )
-                        : DropdownButton<String>(
-                            value: selectedGerobak,
-                            isExpanded: true,
-                            underline: const SizedBox(),
-                            items: gerobak
-                                .map(
-                                  (e) => DropdownMenuItem<String>(
-                                    value: e['id']?.toString(),
-                                    child: Text(
-                                      e['nama_gerobak']?.toString() ?? '-',
-                                    ),
-                                  ),
-                                )
-                                .toList(),
-                            onChanged: (v) async {
-                              if (v == null) return;
-                              setState(() {
-                                selectedGerobak = v;
-                              });
-                              await load();
-                            },
-                          ),
                   ),
                 ),
                 Padding(
