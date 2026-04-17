@@ -6,6 +6,7 @@ import '../../data/services/stock_service.dart';
 import '../sales/sales_screen.dart';
 import '../reports/reports_screen.dart';
 import '../../utils/currency_formatter.dart';
+import '../../core/supabase/selected_gerobak_store.dart';
 import '../widgets/empty_state.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -46,12 +47,32 @@ class _HomeScreenState extends State<HomeScreen> {
     return found.first['nama_gerobak']?.toString() ?? '-';
   }
 
+  Map<String, dynamic> _resolveSelectedGerobak(
+    List<Map<String, dynamic>> gerobaks,
+  ) {
+    final savedId = SelectedGerobakStore.selectedGerobakId;
+
+    if (savedId != null) {
+      for (final item in gerobaks) {
+        if (item['id']?.toString() == savedId) {
+          return item;
+        }
+      }
+    }
+
+    return gerobaks.first;
+  }
+
+  void _saveSelectedGerobakToStore(Map<String, dynamic> item) {
+    SelectedGerobakStore.setGerobak(
+      GerobakItem.fromMap(item),
+    );
+  }
+
   @override
   void initState() {
     super.initState();
     initDashboard();
-    print('AUTH USER ID: ${Supabase.instance.client.auth.currentUser?.id}');
-    print('AUTH USER EMAIL: ${Supabase.instance.client.auth.currentUser?.email}');
   }
 
   Future<void> initDashboard() async {
@@ -71,18 +92,23 @@ class _HomeScreenState extends State<HomeScreen> {
         setState(() {
           _role = role;
           gerobakOptions = [];
+          selectedGerobakId = null;
           isLoading = false;
           errorMessage = 'Data gerobak kosong';
         });
         return;
       }
 
-      selectedGerobakId = gerobaks.first['id']?.toString();
+      final selectedGerobak = _resolveSelectedGerobak(gerobaks);
+      final resolvedId = selectedGerobak['id']?.toString();
+
+      _saveSelectedGerobakToStore(selectedGerobak);
 
       if (!mounted) return;
       setState(() {
         _role = role;
         gerobakOptions = gerobaks;
+        selectedGerobakId = resolvedId;
       });
 
       await loadDashboard();
@@ -273,7 +299,11 @@ class _HomeScreenState extends State<HomeScreen> {
                     : DropdownButton<String>(
                         isExpanded: true,
                         underline: const SizedBox(),
-                        value: selectedGerobakId,
+                        value: gerobakOptions.any(
+                          (item) => item['id']?.toString() == selectedGerobakId,
+                        )
+                            ? selectedGerobakId
+                            : null,
                         items: gerobakOptions.map((item) {
                           return DropdownMenuItem<String>(
                             value: item['id']?.toString(),
@@ -284,7 +314,16 @@ class _HomeScreenState extends State<HomeScreen> {
                         }).toList(),
                         onChanged: (value) async {
                           if (value == null) return;
+
+                          final selected = gerobakOptions.firstWhere(
+                            (item) => item['id']?.toString() == value,
+                          );
+
+                          if (!mounted) return;
                           setState(() => selectedGerobakId = value);
+
+                          _saveSelectedGerobakToStore(selected);
+
                           await loadDashboard();
                         },
                       ),
@@ -379,8 +418,7 @@ class _HomeScreenState extends State<HomeScreen> {
                               final index = entry.key;
                               final item = entry.value;
 
-                              final itemName =
-                                  item['name']?.toString() ?? '-';
+                              final itemName = item['name']?.toString() ?? '-';
                               final qty = ((item['qty'] ?? 0) as num).toInt();
                               final revenue =
                                   ((item['revenue'] ?? 0) as num).toInt();
@@ -400,8 +438,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                       alignment: Alignment.center,
                                       decoration: BoxDecoration(
                                         color: Colors.orange,
-                                        borderRadius:
-                                            BorderRadius.circular(10),
+                                        borderRadius: BorderRadius.circular(10),
                                       ),
                                       child: Text(
                                         "${index + 1}",
@@ -463,10 +500,9 @@ class _HomeScreenState extends State<HomeScreen> {
                             children: recentSales.take(6).map((sale) {
                               final menuName =
                                   sale['menu_name']?.toString() ?? '-';
-                              final qty =
-                                  ((sale['qty'] ?? 0) as num).toInt();
-                              final total = ((sale['total_harga'] ?? 0) as num)
-                                  .toInt();
+                              final qty = ((sale['qty'] ?? 0) as num).toInt();
+                              final total =
+                                  ((sale['total_harga'] ?? 0) as num).toInt();
 
                               return Container(
                                 margin: const EdgeInsets.only(bottom: 10),
@@ -482,8 +518,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                       height: 38,
                                       decoration: BoxDecoration(
                                         color: Colors.orange.withAlpha(16),
-                                        borderRadius:
-                                            BorderRadius.circular(12),
+                                        borderRadius: BorderRadius.circular(12),
                                       ),
                                       child: const Icon(
                                         Icons.shopping_bag_outlined,
