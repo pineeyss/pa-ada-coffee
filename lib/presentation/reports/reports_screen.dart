@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../data/services/report_service.dart';
 import '../../data/services/stock_service.dart';
 import '../../utils/currency_formatter.dart';
@@ -60,83 +61,81 @@ class _ReportsScreenState extends State<ReportsScreen> {
   void initState() {
     super.initState();
     SelectedGerobakStore.selectedGerobak.addListener(
-    _handleSelectedGerobakChanged,
-  );
+      _handleSelectedGerobakChanged,
+    );
     initReports();
   }
 
   @override
-void dispose() {
-  SelectedGerobakStore.selectedGerobak.removeListener(
-    _handleSelectedGerobakChanged,
-  );
-  super.dispose();
-}
+  void dispose() {
+    SelectedGerobakStore.selectedGerobak.removeListener(
+      _handleSelectedGerobakChanged,
+    );
+    super.dispose();
+  }
 
   Future<void> initReports() async {
-  try {
-    if (mounted) {
-      setState(() {
-        isLoading = true;
-        errorMessage = null;
-      });
-    }
+    try {
+      if (mounted) {
+        setState(() {
+          isLoading = true;
+          errorMessage = null;
+        });
+      }
 
-    final role = await _stockService.getCurrentUserRole();
-    final gerobaks = await _stockService.getGerobakOptionsByRole();
+      final role = await _stockService.getCurrentUserRole();
+      final gerobaks = await _stockService.getGerobakOptionsByRole();
 
-    if (gerobaks.isEmpty) {
+      if (gerobaks.isEmpty) {
+        if (!mounted) return;
+        setState(() {
+          _role = role;
+          gerobakOptions = [];
+          selectedGerobakId = null;
+          totalRevenue = 0;
+          totalOrders = 0;
+          averageOrderValue = 0;
+          weeklyRevenue = 0;
+          weeklyOrders = 0;
+          isLoading = false;
+          errorMessage = 'Data gerobak kosong';
+        });
+        return;
+      }
+
+      final storeId = SelectedGerobakStore.selectedGerobakId;
+
+      final selected = gerobaks.any(
+        (item) => item['id']?.toString() == storeId,
+      )
+          ? gerobaks.firstWhere(
+              (item) => item['id']?.toString() == storeId,
+            )
+          : gerobaks.first;
+
+      selectedGerobakId = selected['id']?.toString();
+
+      if (SelectedGerobakStore.selectedGerobak.value == null) {
+        SelectedGerobakStore.setGerobak(
+          GerobakItem.fromMap(selected),
+        );
+      }
+
       if (!mounted) return;
       setState(() {
         _role = role;
-        gerobakOptions = [];
-        selectedGerobakId = null;
-        totalRevenue = 0;
-        totalOrders = 0;
-        averageOrderValue = 0;
-        weeklyRevenue = 0;
-        weeklyOrders = 0;
-        isLoading = false;
-        errorMessage = 'Data gerobak kosong';
+        gerobakOptions = gerobaks;
       });
-      return;
+
+      await loadReports();
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        isLoading = false;
+        errorMessage = 'Gagal load gerobak: $e';
+      });
     }
-
-    // ✅ ambil dari Home
-    final storeId = SelectedGerobakStore.selectedGerobakId;
-
-    final selected = gerobaks.any(
-      (item) => item['id']?.toString() == storeId,
-    )
-        ? gerobaks.firstWhere(
-            (item) => item['id']?.toString() == storeId,
-          )
-        : gerobaks.first;
-
-    selectedGerobakId = selected['id']?.toString();
-
-    // ✅ kalau belum ada, set global
-    if (SelectedGerobakStore.selectedGerobak.value == null) {
-      SelectedGerobakStore.setGerobak(
-        GerobakItem.fromMap(selected),
-      );
-    }
-
-    if (!mounted) return;
-    setState(() {
-      _role = role;
-      gerobakOptions = gerobaks;
-    });
-
-    await loadReports();
-  } catch (e) {
-    if (!mounted) return;
-    setState(() {
-      isLoading = false;
-      errorMessage = 'Gagal load gerobak: $e';
-    });
   }
-}
 
   Future<void> loadReports() async {
     if (selectedGerobakId == null) {
@@ -188,6 +187,50 @@ void dispose() {
         errorMessage = 'Gagal load reports: $e';
       });
     }
+  }
+
+  Future<void> _openSpreadsheet() async {
+    final url = _reportService.getSpreadsheetUrl(
+      role: _role,
+      gerobakName: _selectedGerobakName,
+    );
+
+    if (url == null || url.isEmpty || url.startsWith('ISI_LINK_')) {
+      _showSnackBar('Link spreadsheet belum diisi');
+      return;
+    }
+
+    final uri = Uri.parse(url);
+
+    if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+      _showSnackBar('Gagal membuka spreadsheet');
+    }
+  }
+
+  Future<void> _downloadReport() async {
+    final url = _reportService.getDownloadUrl(
+      role: _role,
+      gerobakName: _selectedGerobakName,
+    );
+
+    if (url == null || url.isEmpty || url.startsWith('ISI_LINK_')) {
+      _showSnackBar('Link download report belum diisi');
+      return;
+    }
+
+    final uri = Uri.parse(url);
+
+    if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
+      _showSnackBar('Gagal membuka file report');
+    }
+  }
+
+  void _showSnackBar(String message) {
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
+    );
   }
 
   String formatRupiah(int value) {
@@ -272,21 +315,49 @@ void dispose() {
                               borderRadius: BorderRadius.circular(12),
                             ),
                             child: SizedBox(
-                                    width: double.infinity,
-                                    child: Padding(
-                                      padding: const EdgeInsets.symmetric(
-                                        vertical: 14,
-                                      ),
-                                      child: Text(
-                                        _selectedGerobakName,
-                                        style: const TextStyle(
-                                          fontSize: 16,
-                                          fontWeight: FontWeight.w600,
-                                          color: Colors.black87,
-                                        ),
-                                      ),
-                                    ),
-                                  )
+                              width: double.infinity,
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 14,
+                                ),
+                                child: Text(
+                                  _selectedGerobakName,
+                                  style: const TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.black87,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 12),
+                          child: _buildSectionCard(
+                            title: _isRider
+                                ? "Laporan ${_selectedGerobakName}"
+                                : "Laporan Keseluruhan",
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: _buildActionButton(
+                                    icon: Icons.table_chart_outlined,
+                                    label: "Lihat Spreadsheet",
+                                    onTap: _openSpreadsheet,
+                                  ),
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: _buildActionButton(
+                                    icon: Icons.download_outlined,
+                                    label: "Download Report",
+                                    onTap: _downloadReport,
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                         const SizedBox(height: 12),
@@ -399,6 +470,42 @@ void dispose() {
                     ),
                   ),
                 ),
+    );
+  }
+
+  Widget _buildActionButton({
+    required IconData icon,
+    required String label,
+    required VoidCallback onTap,
+  }) {
+    return SizedBox(
+      height: 52,
+      child: OutlinedButton.icon(
+        onPressed: onTap,
+        icon: Icon(
+          icon,
+          color: Colors.black87,
+          size: 20,
+        ),
+        label: Text(
+          label,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(
+            color: Colors.black87,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        style: OutlinedButton.styleFrom(
+          side: BorderSide(
+            color: Colors.black.withAlpha(28),
+          ),
+          backgroundColor: Colors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
+        ),
+      ),
     );
   }
 

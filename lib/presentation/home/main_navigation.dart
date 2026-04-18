@@ -152,6 +152,40 @@ class _MainNavigationState extends State<MainNavigation> {
     });
   }
 
+  MaterialStateProperty<IconThemeData?> _iconTheme() {
+    return MaterialStateProperty.resolveWith((states) {
+      if (states.contains(MaterialState.selected)) {
+        return const IconThemeData(
+          color: Colors.black,
+          size: 26,
+        );
+      }
+
+      return IconThemeData(
+        color: Colors.black.withAlpha(160),
+        size: 24,
+      );
+    });
+  }
+
+  MaterialStateProperty<TextStyle?> _labelTextStyle() {
+    return MaterialStateProperty.resolveWith((states) {
+      if (states.contains(MaterialState.selected)) {
+        return const TextStyle(
+          color: Colors.black,
+          fontWeight: FontWeight.w700,
+          fontSize: 12,
+        );
+      }
+
+      return TextStyle(
+        color: Colors.black.withAlpha(160),
+        fontWeight: FontWeight.w500,
+        fontSize: 12,
+      );
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     if (isLoading) {
@@ -167,14 +201,20 @@ class _MainNavigationState extends State<MainNavigation> {
         index: _selectedIndex,
         children: _pages,
       ),
-      bottomNavigationBar: NavigationBar(
-        height: 74,
-        selectedIndex: _selectedIndex,
-        onDestinationSelected: _onItemTapped,
-        backgroundColor: Colors.white,
-        indicatorColor: Colors.orange.withAlpha(22),
-        labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
-        destinations: _destinations,
+      bottomNavigationBar: NavigationBarTheme(
+        data: NavigationBarThemeData(
+          iconTheme: _iconTheme(),
+          labelTextStyle: _labelTextStyle(),
+        ),
+        child: NavigationBar(
+          height: 74,
+          selectedIndex: _selectedIndex,
+          onDestinationSelected: _onItemTapped,
+          backgroundColor: Colors.white,
+          indicatorColor: Colors.black.withAlpha(18),
+          labelBehavior: NavigationDestinationLabelBehavior.alwaysShow,
+          destinations: _destinations,
+        ),
       ),
     );
   }
