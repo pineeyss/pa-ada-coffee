@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import '../../core/app_constans.dart';
 
 class AppButton extends StatelessWidget {
   final String text;
@@ -7,8 +6,8 @@ class AppButton extends StatelessWidget {
   final bool isLoading;
   final Color? backgroundColor;
   final Color? foregroundColor;
-  final IconData? icon;
   final double height;
+  final Widget? icon;
 
   const AppButton({
     super.key,
@@ -17,13 +16,13 @@ class AppButton extends StatelessWidget {
     this.isLoading = false,
     this.backgroundColor,
     this.foregroundColor,
-    this.icon,
     this.height = 52,
+    this.icon,
   });
 
   @override
   Widget build(BuildContext context) {
-    final bg = backgroundColor ?? AppConstants.primaryColor;
+    final bg = backgroundColor ?? Colors.black;
     final fg = foregroundColor ?? Colors.white;
 
     return SizedBox(
@@ -37,7 +36,7 @@ class AppButton extends StatelessWidget {
           disabledBackgroundColor: bg.withAlpha(150),
           elevation: 0,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(AppConstants.radiusMedium),
+            borderRadius: BorderRadius.circular(16),
           ),
         ),
         child: isLoading
@@ -51,16 +50,17 @@ class AppButton extends StatelessWidget {
               )
             : Row(
                 mainAxisAlignment: MainAxisAlignment.center,
+                mainAxisSize: MainAxisSize.min,
                 children: [
                   if (icon != null) ...[
-                    Icon(icon, size: 18),
+                    icon!,
                     const SizedBox(width: 8),
                   ],
                   Text(
                     text,
                     style: const TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
                 ],

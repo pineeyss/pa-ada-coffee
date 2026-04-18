@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import '../../core/app_constans.dart';
 import '../../data/models/detail_transaksi_model.dart';
 import '../../data/models/transaksi_model.dart';
 import '../../data/services/stock_service.dart';
@@ -65,82 +64,80 @@ class _SalesScreenState extends State<SalesScreen> {
 
   @override
   void initState() {
-  super.initState();
+    super.initState();
 
-  SelectedGerobakStore.selectedGerobak.addListener(
-    _handleSelectedGerobakChanged,
-  );
+    SelectedGerobakStore.selectedGerobak.addListener(
+      _handleSelectedGerobakChanged,
+    );
 
-  initSales();
-}
+    initSales();
+  }
 
-@override
-void dispose() {
-  SelectedGerobakStore.selectedGerobak.removeListener(
-    _handleSelectedGerobakChanged,
-  );
-  super.dispose();
-}
+  @override
+  void dispose() {
+    SelectedGerobakStore.selectedGerobak.removeListener(
+      _handleSelectedGerobakChanged,
+    );
+    super.dispose();
+  }
 
   Future<void> initSales() async {
-  try {
-    if (mounted) {
-      setState(() => isLoading = true);
-    }
+    try {
+      if (mounted) {
+        setState(() => isLoading = true);
+      }
 
-    final role = await _stockService.getCurrentUserRole();
-    final gerobaks = await _stockService.getGerobakOptionsByRole();
+      final role = await _stockService.getCurrentUserRole();
+      final gerobaks = await _stockService.getGerobakOptionsByRole();
 
-    if (gerobaks.isEmpty) {
+      if (gerobaks.isEmpty) {
+        if (!mounted) return;
+        setState(() {
+          _role = role;
+          gerobakOptions = [];
+          selectedGerobakId = null;
+          selectedItem = null;
+          items = [];
+          qty = 1;
+          payment = null;
+          isLoading = false;
+        });
+        return;
+      }
+
+      final storeId = SelectedGerobakStore.selectedGerobakId;
+
+      final selected = gerobaks.any(
+        (item) => item['id']?.toString() == storeId,
+      )
+          ? gerobaks.firstWhere(
+              (item) => item['id']?.toString() == storeId,
+            )
+          : gerobaks.first;
+
+      selectedGerobakId = selected['id']?.toString();
+
+      if (SelectedGerobakStore.selectedGerobak.value == null) {
+        SelectedGerobakStore.setGerobak(
+          GerobakItem.fromMap(selected),
+        );
+      }
+
       if (!mounted) return;
       setState(() {
         _role = role;
-        gerobakOptions = [];
-        selectedGerobakId = null;
-        selectedItem = null;
-        items = [];
-        qty = 1;
-        payment = null;
-        isLoading = false;
+        gerobakOptions = gerobaks;
       });
-      return;
-    }
 
-    // ✅ ambil dari global store (Home)
-    final storeId = SelectedGerobakStore.selectedGerobakId;
-
-    final selected = gerobaks.any(
-      (item) => item['id']?.toString() == storeId,
-    )
-        ? gerobaks.firstWhere(
-            (item) => item['id']?.toString() == storeId,
-          )
-        : gerobaks.first;
-
-    selectedGerobakId = selected['id']?.toString();
-
-    // ✅ kalau belum ada di store, set
-    if (SelectedGerobakStore.selectedGerobak.value == null) {
-      SelectedGerobakStore.setGerobak(
-        GerobakItem.fromMap(selected),
+      await loadMenusByGerobak();
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => isLoading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Gagal load sales: $e")),
       );
     }
-
-    if (!mounted) return;
-    setState(() {
-      _role = role;
-      gerobakOptions = gerobaks;
-    });
-
-    await loadMenusByGerobak();
-  } catch (e) {
-    if (!mounted) return;
-    setState(() => isLoading = false);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text("Gagal load sales: $e")),
-    );
   }
-}
 
   Future<void> loadMenusByGerobak() async {
     if (selectedGerobakId == null) {
@@ -341,18 +338,18 @@ void dispose() {
     final name = _normalizeName(menuName);
 
     const imageMap = <String, String>{
-      'Americano'     : 'assets/images/menu_07.png',
-      'Pandawa'       : 'assets/images/menu_06.png',
-      'Butterscotch'  : 'assets/images/menu_06.png',
-      'Caramel'       : 'assets/images/menu_06.png',
-      'Hazelnut'      : 'assets/images/menu_06.png',
-      'Salted Caramel': 'assets/images/menu_06.png',
-      'Mico'          : 'assets/images/menu_06.png',
-      'Lowco'         : 'assets/images/menu_03.png',
-      'Matcha'        : 'assets/images/menu_05.png',
-      'Taro'          : 'assets/images/menu_01.png',
-      'Red Velvet'    : 'assets/images/menu_02.png',
-      'Choco'         : 'assets/images/menu_04.png',
+      'americano': 'assets/images/menu_07.png',
+      'pandawa': 'assets/images/menu_06.png',
+      'butterscotch': 'assets/images/menu_06.png',
+      'caramel': 'assets/images/menu_06.png',
+      'hazelnut': 'assets/images/menu_06.png',
+      'salted caramel': 'assets/images/menu_06.png',
+      'mico': 'assets/images/menu_06.png',
+      'lowco': 'assets/images/menu_03.png',
+      'matcha': 'assets/images/menu_05.png',
+      'taro': 'assets/images/menu_01.png',
+      'red velvet': 'assets/images/menu_02.png',
+      'choco': 'assets/images/menu_04.png',
     };
 
     return imageMap[name];
@@ -397,12 +394,12 @@ void dispose() {
           return Container(
             width: width,
             height: height,
-            color: Colors.orange.withAlpha(18),
+            color: Colors.black.withAlpha(18),
             alignment: Alignment.center,
             child: const Icon(
               Icons.local_cafe,
               size: 34,
-              color: Colors.orange,
+              color: Colors.black,
             ),
           );
         },
@@ -413,7 +410,7 @@ void dispose() {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppConstants.pageBackground,
+      backgroundColor: const Color(0xFFF5F5F5),
       body: isLoading
           ? const Center(child: CircularProgressIndicator())
           : SafeArea(
@@ -432,23 +429,22 @@ void dispose() {
                               ),
                               decoration: BoxDecoration(
                                 color: Colors.white,
-                                borderRadius: BorderRadius.circular(
-                                  AppConstants.radiusSmall,
-                                ),
+                                borderRadius: BorderRadius.circular(12),
                               ),
-                              child:Row(
-                                      children: [
-                                        Expanded(
-                                          child: Text(
-                                            _selectedGerobakName,
-                                            style: const TextStyle(
-                                              fontSize: 16,
-                                              fontWeight: FontWeight.w600,
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    )
+                              child: Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      _selectedGerobakName,
+                                      style: const TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.black87,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
                           ),
                           const SizedBox(height: 10),
@@ -491,9 +487,7 @@ void dispose() {
                                       final isSelected =
                                           selectedItem?['menu_id'] == menuId;
                                       final isOutOfStock = stock <= 0;
-                                      final isLowStock = stock > 0 &&
-                                          stock <
-                                              AppConstants.lowStockThreshold;
+                                      final isLowStock = stock > 0 && stock < 5;
 
                                       return GestureDetector(
                                         onTap: isOutOfStock
@@ -511,25 +505,21 @@ void dispose() {
                                           padding: const EdgeInsets.all(10),
                                           decoration: BoxDecoration(
                                             color: Colors.white,
-                                            borderRadius: BorderRadius.circular(
-                                              AppConstants.radiusLarge,
-                                            ),
+                                            borderRadius:
+                                                BorderRadius.circular(20),
                                             border: isSelected
                                                 ? Border.all(
-                                                    color: AppConstants
-                                                        .primaryColor,
+                                                    color: Colors.black,
                                                     width: 1.8,
                                                   )
                                                 : Border.all(
-                                                    color:
-                                                        Colors.grey.shade200,
+                                                    color: Colors.grey.shade200,
                                                     width: 1,
                                                   ),
                                             boxShadow: [
                                               BoxShadow(
                                                 color: isSelected
-                                                    ? AppConstants.primaryColor
-                                                        .withAlpha(35)
+                                                    ? Colors.black.withAlpha(35)
                                                     : Colors.black.withAlpha(10),
                                                 blurRadius: isSelected ? 12 : 8,
                                                 offset: const Offset(0, 4),
@@ -603,7 +593,7 @@ void dispose() {
                                                 maxLines: 1,
                                                 overflow: TextOverflow.ellipsis,
                                                 style: const TextStyle(
-                                                  color: Colors.orange,
+                                                  color: Colors.black,
                                                   fontSize: 13,
                                                   fontWeight: FontWeight.w700,
                                                 ),
@@ -629,7 +619,8 @@ void dispose() {
 
   Widget _buildBottomCheckout() {
     final selectedIndex = items.indexWhere(
-      (item) => item['menu_id']?.toString() == selectedItem?['menu_id']?.toString(),
+      (item) =>
+          item['menu_id']?.toString() == selectedItem?['menu_id']?.toString(),
     );
 
     return Container(
@@ -687,7 +678,7 @@ void dispose() {
                 Text(
                   _formatRupiah(_selectedPrice),
                   style: const TextStyle(
-                    color: Colors.orange,
+                    color: Colors.black,
                     fontWeight: FontWeight.bold,
                     fontSize: 14,
                   ),
@@ -741,13 +732,13 @@ void dispose() {
             ),
             const SizedBox(height: 14),
             Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+              padding: const EdgeInsets.symmetric(
+                horizontal: 14,
+                vertical: 12,
+              ),
               decoration: BoxDecoration(
-                color: AppConstants.primaryColor.withAlpha(12),
-                borderRadius: BorderRadius.circular(
-                  AppConstants.radiusMedium,
-                ),
+                color: Colors.black.withAlpha(12),
+                borderRadius: BorderRadius.circular(16),
               ),
               child: Row(
                 children: [
@@ -762,7 +753,7 @@ void dispose() {
                     _formatRupiah(_totalPrice),
                     style: const TextStyle(
                       fontWeight: FontWeight.bold,
-                      color: Colors.orange,
+                      color: Colors.black,
                       fontSize: 16,
                     ),
                   ),
@@ -789,7 +780,7 @@ void dispose() {
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: Colors.grey.shade50,
-        borderRadius: BorderRadius.circular(AppConstants.radiusMedium),
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: Colors.grey.shade200,
         ),
@@ -845,12 +836,10 @@ void dispose() {
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 9),
         decoration: BoxDecoration(
-          color: isSelected ? AppConstants.primaryColor : Colors.white,
-          borderRadius: BorderRadius.circular(AppConstants.radiusSmall),
+          color: isSelected ? Colors.black : Colors.white,
+          borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: isSelected
-                ? AppConstants.primaryColor
-                : Colors.grey.shade300,
+            color: isSelected ? Colors.black : Colors.grey.shade300,
           ),
         ),
         child: Center(

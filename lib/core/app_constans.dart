@@ -1,14 +1,21 @@
 import 'package:flutter/material.dart';
 
-class AppConstants {
-  static const int lowStockThreshold = 5;
+class AppColors {
+  static const primary = Color(0xFFFF7A1A);
+  static const secondary = Color(0xFFFFB347);
+  static const bg = Color(0xFFF5F5F5);
+  static const card = Colors.white;
+  static const text = Colors.black87;
+  static const icon = Colors.black;
+}
 
-  static const Color primaryColor = Colors.orange;
-  static const Color pageBackground = Color(0xFFF8F5F2);
-  static const Color cardBackground = Colors.white;
-
-  static const double radiusSmall = 12;
-  static const double radiusMedium = 16;
-  static const double radiusLarge = 18;
-  static const double radiusXL = 24;
+class AppTheme {
+  static ThemeData light = ThemeData(
+    scaffoldBackgroundColor: AppColors.bg,
+    fontFamily: 'Sans',
+    colorScheme: ColorScheme.fromSeed(seedColor: AppColors.primary),
+    iconTheme: const IconThemeData(
+      color: Colors.black,
+    ),
+  );
 }

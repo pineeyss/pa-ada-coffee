@@ -30,12 +30,12 @@ class EmptyState extends StatelessWidget {
             width: 52,
             height: 52,
             decoration: BoxDecoration(
-              color: Colors.orange.withAlpha(18),
+              color: Colors.black.withAlpha(12),
               borderRadius: BorderRadius.circular(16),
             ),
             child: Icon(
               icon,
-              color: Colors.orange,
+              color: Colors.black,
               size: 26,
             ),
           ),
