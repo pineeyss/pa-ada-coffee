@@ -59,8 +59,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-
-
   String get todayText {
     final now = DateTime.now();
 
@@ -105,6 +103,83 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
+  String _getPhotoUrl() {
+    final directPhoto = profileData?['photo_url']?.toString();
+    final avatarPhoto = profileData?['avatar_url']?.toString();
+    final imagePhoto = profileData?['image_url']?.toString();
+
+    if (directPhoto != null && directPhoto.isNotEmpty) return directPhoto;
+    if (avatarPhoto != null && avatarPhoto.isNotEmpty) return avatarPhoto;
+    if (imagePhoto != null && imagePhoto.isNotEmpty) return imagePhoto;
+
+    return '';
+  }
+
+  String _getInitials(String name, String email) {
+    final cleanName = name.trim();
+    if (cleanName.isNotEmpty && cleanName != 'AD.A Coffee User') {
+      final parts = cleanName.split(RegExp(r'\s+'));
+      if (parts.length == 1) {
+        return parts.first.substring(0, parts.first.length >= 2 ? 2 : 1).toUpperCase();
+      }
+      return (parts.first.characters.first + parts.last.characters.first).toUpperCase();
+    }
+
+    final safeEmail = email.trim();
+    if (safeEmail.isNotEmpty && safeEmail != '-') {
+      return safeEmail.substring(0, safeEmail.length >= 2 ? 2 : 1).toUpperCase();
+    }
+
+    return 'U';
+  }
+
+  Color _getAvatarColor(String seed) {
+    const colors = [
+      Color(0xFFE3F2FD),
+      Color(0xFFF3E5F5),
+      Color(0xFFE8F5E9),
+      Color(0xFFFFF3E0),
+      Color(0xFFFFEBEE),
+      Color(0xFFE0F7FA),
+      Color(0xFFF1F8E9),
+    ];
+
+    final hash = seed.runes.fold<int>(0, (prev, element) => prev + element);
+    return colors[hash % colors.length];
+  }
+
+  Widget _buildProfileAvatar({
+    required String name,
+    required String email,
+  }) {
+    final photoUrl = _getPhotoUrl();
+
+    if (photoUrl.isNotEmpty) {
+      return CircleAvatar(
+        radius: 42,
+        backgroundColor: const Color(0xFFFFF0E3),
+        backgroundImage: NetworkImage(photoUrl),
+      );
+    }
+
+    final initials = _getInitials(name, email);
+    final seed = '${name}_$email';
+    final bgColor = _getAvatarColor(seed);
+
+    return CircleAvatar(
+      radius: 42,
+      backgroundColor: bgColor,
+      child: Text(
+        initials,
+        style: const TextStyle(
+          fontSize: 24,
+          fontWeight: FontWeight.bold,
+          color: Colors.black87,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final user = supabase.auth.currentUser;
@@ -147,14 +222,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       ),
                       child: Column(
                         children: [
-                          const CircleAvatar(
-                            radius: 42,
-                            backgroundColor: Color(0xFFFFF0E3),
-                            child: Icon(
-                              Icons.person,
-                              size: 42,
-                              color: Colors.orange,
-                            ),
+                          _buildProfileAvatar(
+                            name: name,
+                            email: email,
                           ),
                           const SizedBox(height: 14),
                           Text(
@@ -209,7 +279,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           SizedBox(
                             width: double.infinity,
                             child: ElevatedButton.icon(
-                                onPressed: () async {
+                              onPressed: () async {
                                 final ok = await DialogHelper.confirm(
                                   context,
                                   title: "Logout",
@@ -224,8 +294,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                 backgroundColor: Colors.red,
                                 foregroundColor: Colors.white,
                                 elevation: 0,
-                                padding:
-                                    const EdgeInsets.symmetric(vertical: 15),
+                                padding: const EdgeInsets.symmetric(vertical: 15),
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(14),
                                 ),
@@ -258,10 +327,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
       child: Row(
         children: [
           CircleAvatar(
-            backgroundColor: Colors.orange.withAlpha(18),
-            child: Icon(icon, color: Colors.orange),
+            radius: 22,
+            backgroundColor: Colors.orange.withAlpha(20),
+            child: Icon(
+              icon,
+              color: Colors.orange,
+              size: 22,
+            ),
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: 14),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -270,13 +344,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   title,
                   style: const TextStyle(
                     fontSize: 12,
-                    color: Colors.grey,
+                    color: Colors.black54,
                   ),
                 ),
                 const SizedBox(height: 4),
                 Text(
                   value,
                   style: const TextStyle(
+                    fontSize: 15,
                     fontWeight: FontWeight.w600,
                     color: Colors.black87,
                   ),

@@ -19,6 +19,56 @@ class ReportService {
     return (start: start, end: end);
   }
 
+  String _normalizeName(String value) {
+    return value.trim().toLowerCase().replaceAll(RegExp(r'\s+'), '_');
+  }
+
+  // =======================
+  // GANTI LINK DI BAWAH INI
+  // =======================
+
+  static const String ownerSpreadsheetAll =
+      'ISI_LINK_SPREADSHEET_OWNER_KESELURUHAN';
+
+  static const String ownerDownloadAll =
+      'ISI_LINK_DOWNLOAD_OWNER_KESELURUHAN';
+
+  static const Map<String, String> spreadsheetByGerobakName = {
+    'gerobak_1': 'ISI_LINK_SPREADSHEET_GEROBAK_1',
+    'gerobak_2': 'ISI_LINK_SPREADSHEET_GEROBAK_2',
+    'gerobak_3': 'ISI_LINK_SPREADSHEET_GEROBAK_3',
+  };
+
+  static const Map<String, String> downloadByGerobakName = {
+    'gerobak_1': 'ISI_LINK_DOWNLOAD_GEROBAK_1',
+    'gerobak_2': 'ISI_LINK_DOWNLOAD_GEROBAK_2',
+    'gerobak_3': 'ISI_LINK_DOWNLOAD_GEROBAK_3',
+  };
+
+  String? getSpreadsheetUrl({
+    required String role,
+    String? gerobakName,
+  }) {
+    if (role == 'owner') {
+      return ownerSpreadsheetAll;
+    }
+
+    final normalized = _normalizeName(gerobakName ?? '');
+    return spreadsheetByGerobakName[normalized];
+  }
+
+  String? getDownloadUrl({
+    required String role,
+    String? gerobakName,
+  }) {
+    if (role == 'owner') {
+      return ownerDownloadAll;
+    }
+
+    final normalized = _normalizeName(gerobakName ?? '');
+    return downloadByGerobakName[normalized];
+  }
+
   Future<int> getTotalRevenue({
     String? gerobakId,
     int days = 1,
@@ -73,49 +123,49 @@ class ReportService {
     return response.length;
   }
 
-Future<int> getWeeklyRevenue({
-  required String? gerobakId,
-}) async {
-  if (gerobakId == null) return 0;
+  Future<int> getWeeklyRevenue({
+    required String? gerobakId,
+  }) async {
+    if (gerobakId == null) return 0;
 
-  final now = DateTime.now();
-  final sevenDaysAgo = now.subtract(const Duration(days: 7));
+    final now = DateTime.now();
+    final sevenDaysAgo = now.subtract(const Duration(days: 7));
 
-  final response = await supabase
-      .from('transaksi')
-      .select('total_harga, tanggal')
-      .eq('gerobak_id', gerobakId)
-      .gte('tanggal', sevenDaysAgo.toIso8601String());
+    final response = await supabase
+        .from('transaksi')
+        .select('total_harga, tanggal')
+        .eq('gerobak_id', gerobakId)
+        .gte('tanggal', sevenDaysAgo.toIso8601String());
 
-  final data = List<Map<String, dynamic>>.from(response);
+    final data = List<Map<String, dynamic>>.from(response);
 
-  int total = 0;
+    int total = 0;
 
-  for (var item in data) {
-  total += (item['total_harga'] as num?)?.toInt() ?? 0;
+    for (var item in data) {
+      total += (item['total_harga'] as num?)?.toInt() ?? 0;
+    }
+
+    return total;
   }
 
-  return total;
-}
+  Future<int> getWeeklyOrders({
+    required String? gerobakId,
+  }) async {
+    if (gerobakId == null) return 0;
 
-Future<int> getWeeklyOrders({
-  required String? gerobakId,
-}) async {
-  if (gerobakId == null) return 0;
+    final now = DateTime.now();
+    final sevenDaysAgo = now.subtract(const Duration(days: 7));
 
-  final now = DateTime.now();
-  final sevenDaysAgo = now.subtract(const Duration(days: 7));
+    final response = await supabase
+        .from('transaksi')
+        .select('id, tanggal')
+        .eq('gerobak_id', gerobakId)
+        .gte('tanggal', sevenDaysAgo.toIso8601String());
 
-  final response = await supabase
-      .from('transaksi')
-      .select('id, tanggal')
-      .eq('gerobak_id', gerobakId)
-      .gte('tanggal', sevenDaysAgo.toIso8601String());
+    final data = List<Map<String, dynamic>>.from(response);
 
-  final data = List<Map<String, dynamic>>.from(response);
-
-  return data.length;
-}
+    return data.length;
+  }
 
   Future<List<Map<String, dynamic>>> getTopSellingItems({
     String? gerobakId,
