@@ -28,10 +28,65 @@ Project ini menggunakan pendekatan layered architecture, yang terdiri dari:
 - Core Layer → Konfigurasi global (Supabase & theme)
 
 ## Struktur Project
-(-)
+
+```` bash
+lib
+├── core
+│   ├── app_constans.dart
+│   ├── supabase
+│   │   ├── selected_gerobak_store.dart
+│   │   └── supabase_config.dart
+│   └── theme
+│       └── app_theme.dart
+├── data
+│   ├── models
+│   │   ├── detail_transaksi_model.dart
+│   │   ├── menu_item_model.dart
+│   │   └── transaksi_model.dart
+│   └── services
+│       ├── auth_service.dart
+│       ├── gerobak_service.dart
+│       ├── menu_service.dart
+│       ├── report_service.dart
+│       ├── stock_service.dart
+│       └── transaksi_service.dart
+├── main.dart
+├── presentation
+│   ├── auth
+│   │   ├── auth_wrapper.dart
+│   │   ├── login_page.dart
+│   │   └── register_page.dart
+│   ├── dashboard
+│   │   └── home_screen.dart
+│   ├── home
+│   │   └── main_navigation.dart
+│   ├── menu
+│   │   └── menu_screen.dart
+│   ├── profile
+│   │   └── profile_screen.dart
+│   ├── reports
+│   │   └── reports_screen.dart
+│   ├── rider
+│   │   ├── rider_navigation.dart
+│   │   └── rider_page.dart
+│   ├── sales
+│   │   └── sales_screen.dart
+│   ├── stock
+│   │   └── stock_screen.dart
+│   └── widgets
+│       ├── app_button.dart
+│       ├── app_card.dart
+│       ├── dashboard_card.dart
+│       ├── empty_state.dart
+│       └── header.dart
+└── utils
+    ├── currency_formatter.dart
+    └── dialog_helper.dart
+
+```` 
 
 ## Analisis Struktur Code
-1. Core Layer
+### 1. Core Layer
 
 `supabase_config.dart`
 File ini berfungsi sebagai pusat konfigurasi backend:
@@ -57,9 +112,9 @@ Tujuan:
 - Konsistensi UI
 - Maintainability desain
 
-2. Data Layer
+### 2. Data Layer
 
-a. Models
+#### a. Models
 Contoh: `menu_item_model.dart`
 ``` dart
 class MenuItem {
@@ -80,7 +135,7 @@ Fungsi:
 - Representasi struktur tabel database
 - Konversi JSON → Object (deserialization)
 
-b. Services (Logic + Database Access)
+#### b. Services (Logic + Database Access)
 
 `menu_service.dart`
 Mengambil data menu dari Supabase:
@@ -115,28 +170,28 @@ Mengelola autentikasi:
 - Register
 - Session management
 
-3. Presentation Layer
+### 3. Presentation Layer
 
 Layer ini adalah bagian UI.
 
-a. Authentication
+#### a. Authentication
 - `login_page.dart`
 - `register_page.dart`
 - `auth_wrapper.dart` → handle session login
   
-b. Dashboard
+#### b. Dashboard
 `home_screen.dart`:
 - Menampilkan ringkasan data
 - Menggunakan widget seperti:
    - `dashboard_card.dart`
    - `header.dart`
      
-c. Navigation
+#### c. Navigation
 `main_navigation.dart`:
 - Bottom navigation
 - Routing antar halaman
 
-d. Modul Fitur
+#### d. Modul Fitur
 | Modul   | Fungsi                    |
 | ------- | ------------------------- |
 | Menu    | Menampilkan daftar produk |
@@ -146,7 +201,7 @@ d. Modul Fitur
 | Rider   | Interface khusus kurir    |
 | Profile | Data user                 |
 
-e. Reusable Widgets
+#### e. Reusable Widgets
 Contoh:
 ``` dart
 DashboardCard(
