@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+
+import '../../utils/dialog_helper.dart';
 import '../auth/login_page.dart';
 import '../widgets/header.dart';
-import '../../utils/dialog_helper.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -12,10 +14,11 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
-  final SupabaseClient supabase = Supabase.instance.client;
+  final supabase = Supabase.instance.client;
 
   Map<String, dynamic>? profileData;
   bool isLoading = true;
+  bool isUploadingPhoto = false;
 
   @override
   void initState() {
@@ -38,12 +41,123 @@ class _ProfileScreenState extends State<ProfileScreen> {
           .eq('id', user.id)
           .maybeSingle();
 
+      if (!mounted) return;
+
       setState(() {
         profileData = profile;
         isLoading = false;
       });
+
+      debugPrint('PROFILE: $profile');
     } catch (e) {
+      debugPrint('LOAD PROFILE ERROR: $e');
+
+      if (!mounted) return;
       setState(() => isLoading = false);
+    }
+  }
+
+  Future<void> pickAndUploadImage() async {
+    if (isUploadingPhoto) return;
+
+    try {
+      final picker = ImagePicker();
+
+      final image = await picker.pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 85,
+      );
+
+      if (image == null) return;
+
+      final user = supabase.auth.currentUser;
+      if (user == null) return;
+
+      setState(() => isUploadingPhoto = true);
+
+      final bytes = await image.readAsBytes();
+
+      final ext = _getSafeExtension(image.name);
+      final filePath =
+          '${user.id}/profile_${DateTime.now().millisecondsSinceEpoch}.$ext';
+
+      debugPrint('IMAGE NAME: ${image.name}');
+      debugPrint('FILE PATH STORAGE: $filePath');
+
+      await supabase.storage.from('avatars').uploadBinary(
+            filePath,
+            bytes,
+            fileOptions: FileOptions(
+              upsert: true,
+              contentType: _getContentType(ext),
+            ),
+          );
+
+      final publicUrl = supabase.storage.from('avatars').getPublicUrl(filePath);
+      final finalUrl = '$publicUrl?v=${DateTime.now().millisecondsSinceEpoch}';
+
+      debugPrint('PUBLIC URL: $finalUrl');
+
+      await supabase.from('profiles').update({
+        'photo_url': finalUrl,
+      }).eq('id', user.id);
+
+      if (!mounted) return;
+
+      setState(() {
+        profileData = {
+          ...?profileData,
+          'photo_url': finalUrl,
+        };
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Foto profil berhasil diperbarui'),
+        ),
+      );
+    } catch (e) {
+      debugPrint('UPLOAD ERROR: $e');
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Gagal upload foto: $e'),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => isUploadingPhoto = false);
+      }
+    }
+  }
+
+  String _getSafeExtension(String fileName) {
+    final lower = fileName.toLowerCase();
+
+    if (lower.endsWith('.png')) return 'png';
+    if (lower.endsWith('.webp')) return 'webp';
+    if (lower.endsWith('.gif')) return 'gif';
+    if (lower.endsWith('.jpeg')) return 'jpeg';
+    if (lower.endsWith('.jpg')) return 'jpg';
+
+    return 'jpg';
+  }
+
+  String _getContentType(String ext) {
+    switch (ext) {
+      case 'png':
+        return 'image/png';
+      case 'webp':
+        return 'image/webp';
+      case 'gif':
+        return 'image/gif';
+      case 'jpeg':
+        return 'image/jpeg';
+      case 'jpg':
+      default:
+        return 'image/jpeg';
     }
   }
 
@@ -104,79 +218,143 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   String _getPhotoUrl() {
-    final directPhoto = profileData?['photo_url']?.toString();
-    final avatarPhoto = profileData?['avatar_url']?.toString();
-    final imagePhoto = profileData?['image_url']?.toString();
+    final photo = profileData?['photo_url']?.toString().trim();
 
-    if (directPhoto != null && directPhoto.isNotEmpty) return directPhoto;
-    if (avatarPhoto != null && avatarPhoto.isNotEmpty) return avatarPhoto;
-    if (imagePhoto != null && imagePhoto.isNotEmpty) return imagePhoto;
+    debugPrint('PHOTO_URL DB: $photo');
+
+    if (photo != null && photo.isNotEmpty) {
+      return photo;
+    }
 
     return '';
   }
 
-  String _getInitials(String name, String email) {
-    final cleanName = name.trim();
-    if (cleanName.isNotEmpty && cleanName != 'AD.A Coffee User') {
-      final parts = cleanName.split(RegExp(r'\s+'));
-      if (parts.length == 1) {
-        return parts.first.substring(0, parts.first.length >= 2 ? 2 : 1).toUpperCase();
-      }
-      return (parts.first.characters.first + parts.last.characters.first).toUpperCase();
-    }
+  Widget _buildAvatarImage() {
+    final imageUrl = _getPhotoUrl();
 
-    final safeEmail = email.trim();
-    if (safeEmail.isNotEmpty && safeEmail != '-') {
-      return safeEmail.substring(0, safeEmail.length >= 2 ? 2 : 1).toUpperCase();
-    }
-
-    return 'U';
-  }
-
-  Color _getAvatarColor(String seed) {
-    const colors = [
-      Color(0xFFE3F2FD),
-      Color(0xFFF3E5F5),
-      Color(0xFFE8F5E9),
-      Color(0xFFFFF3E0),
-      Color(0xFFFFEBEE),
-      Color(0xFFE0F7FA),
-      Color(0xFFF1F8E9),
-    ];
-
-    final hash = seed.runes.fold<int>(0, (prev, element) => prev + element);
-    return colors[hash % colors.length];
-  }
-
-  Widget _buildProfileAvatar({
-    required String name,
-    required String email,
-  }) {
-    final photoUrl = _getPhotoUrl();
-
-    if (photoUrl.isNotEmpty) {
-      return CircleAvatar(
-        radius: 42,
-        backgroundColor: const Color(0xFFFFF0E3),
-        backgroundImage: NetworkImage(photoUrl),
+    if (imageUrl.isEmpty) {
+      return Container(
+        width: 84,
+        height: 84,
+        decoration: const BoxDecoration(
+          color: Color(0xFFFFF0E3),
+          shape: BoxShape.circle,
+        ),
+        alignment: Alignment.center,
+        child: const Icon(
+          Icons.person,
+          size: 40,
+          color: Colors.brown,
+        ),
       );
     }
 
-    final initials = _getInitials(name, email);
-    final seed = '${name}_$email';
-    final bgColor = _getAvatarColor(seed);
+    return ClipOval(
+      child: Image.network(
+        imageUrl,
+        key: ValueKey(imageUrl),
+        width: 84,
+        height: 84,
+        fit: BoxFit.cover,
+        errorBuilder: (context, error, stackTrace) {
+          debugPrint('IMAGE LOAD ERROR: $error');
+          debugPrint('FAILED URL: $imageUrl');
 
-    return CircleAvatar(
-      radius: 42,
-      backgroundColor: bgColor,
-      child: Text(
-        initials,
-        style: const TextStyle(
-          fontSize: 24,
-          fontWeight: FontWeight.bold,
-          color: Colors.black87,
-        ),
+          return Container(
+            width: 84,
+            height: 84,
+            decoration: const BoxDecoration(
+              color: Color(0xFFFFF0E3),
+              shape: BoxShape.circle,
+            ),
+            alignment: Alignment.center,
+            child: const Icon(
+              Icons.person,
+              size: 40,
+              color: Colors.brown,
+            ),
+          );
+        },
       ),
+    );
+  }
+
+  Widget _buildProfileAvatar() {
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        GestureDetector(
+          onTap: pickAndUploadImage,
+          child: Container(
+            width: 92,
+            height: 92,
+            padding: const EdgeInsets.all(4),
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: const Color(0xFFFFF0E3),
+              border: Border.all(
+                color: Colors.orange.withOpacity(0.25),
+                width: 2,
+              ),
+              boxShadow: const [
+                BoxShadow(
+                  color: Colors.black12,
+                  blurRadius: 10,
+                  offset: Offset(0, 4),
+                ),
+              ],
+            ),
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                _buildAvatarImage(),
+                if (isUploadingPhoto)
+                  Container(
+                    width: 84,
+                    height: 84,
+                    decoration: BoxDecoration(
+                      color: Colors.black.withOpacity(0.35),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Center(
+                      child: SizedBox(
+                        width: 26,
+                        height: 26,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2.6,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+        Positioned(
+          right: -2,
+          bottom: -2,
+          child: GestureDetector(
+            onTap: pickAndUploadImage,
+            child: Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.orange,
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: Colors.white,
+                  width: 2,
+                ),
+              ),
+              child: const Icon(
+                Icons.camera_alt,
+                color: Colors.white,
+                size: 16,
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -222,11 +400,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       ),
                       child: Column(
                         children: [
-                          _buildProfileAvatar(
-                            name: name,
-                            email: email,
-                          ),
+                          _buildProfileAvatar(),
                           const SizedBox(height: 14),
+                          const Text(
+                            'Tap foto untuk mengganti',
+                            style: TextStyle(
+                              color: Colors.grey,
+                              fontSize: 12,
+                            ),
+                          ),
+                          const SizedBox(height: 10),
                           Text(
                             name,
                             textAlign: TextAlign.center,
@@ -252,7 +435,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               vertical: 8,
                             ),
                             decoration: BoxDecoration(
-                              color: Colors.orange.withAlpha(18),
+                              color: Colors.orange.withOpacity(0.08),
                               borderRadius: BorderRadius.circular(999),
                             ),
                             child: Text(
@@ -328,7 +511,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         children: [
           CircleAvatar(
             radius: 22,
-            backgroundColor: Colors.orange.withAlpha(20),
+            backgroundColor: Colors.orange.withOpacity(0.20),
             child: Icon(
               icon,
               color: Colors.orange,

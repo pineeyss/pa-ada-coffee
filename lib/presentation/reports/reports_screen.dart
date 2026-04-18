@@ -221,15 +221,14 @@ class _ReportsScreenState extends State<ReportsScreen> {
     final uri = Uri.parse(url);
 
     if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
-      _showSnackBar('Gagal membuka file report');
+      _showSnackBar('Gagal membuka report');
     }
   }
 
-  void _showSnackBar(String message) {
+  void _showSnackBar(String msg) {
     if (!mounted) return;
-
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
+      SnackBar(content: Text(msg)),
     );
   }
 
@@ -239,237 +238,217 @@ class _ReportsScreenState extends State<ReportsScreen> {
 
   String get todayText {
     final now = DateTime.now();
-
-    const days = [
-      'Senin',
-      'Selasa',
-      'Rabu',
-      'Kamis',
-      'Jumat',
-      'Sabtu',
-      'Minggu',
-    ];
-
-    const months = [
-      'Januari',
-      'Februari',
-      'Maret',
-      'April',
-      'Mei',
-      'Juni',
-      'Juli',
-      'Agustus',
-      'September',
-      'Oktober',
-      'November',
-      'Desember',
-    ];
-
-    return '${days[now.weekday - 1]}, ${now.day} ${months[now.month - 1]} ${now.year}';
+    final day = now.day.toString().padLeft(2, '0');
+    final month = now.month.toString().padLeft(2, '0');
+    final year = now.year;
+    return '$day/$month/$year';
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF8F5F2),
-      body: isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : errorMessage != null
-              ? Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
+      backgroundColor: const Color(0xFFF5F5F5),
+      body: SafeArea(
+        child: isLoading
+            ? const Center(
+                child: CircularProgressIndicator(),
+              )
+            : errorMessage != null
+                ? RefreshIndicator(
+                    onRefresh: initReports,
+                    child: ListView(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      padding: const EdgeInsets.all(16),
                       children: [
+                        const SizedBox(height: 120),
                         const Icon(
                           Icons.error_outline,
-                          size: 48,
-                          color: Colors.red,
+                          size: 56,
+                          color: Colors.redAccent,
                         ),
                         const SizedBox(height: 12),
                         Text(
                           errorMessage!,
                           textAlign: TextAlign.center,
-                        ),
-                        const SizedBox(height: 16),
-                        ElevatedButton(
-                          onPressed: initReports,
-                          child: const Text('Coba Lagi'),
+                          style: const TextStyle(
+                            fontSize: 14,
+                            color: Colors.black54,
+                          ),
                         ),
                       ],
                     ),
-                  ),
-                )
-              : RefreshIndicator(
-                  onRefresh: loadReports,
-                  child: SingleChildScrollView(
-                    physics: const AlwaysScrollableScrollPhysics(),
-                    child: Column(
-                      children: [
-                        AppHeader(
-                          subtitle: todayText,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 12),
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: SizedBox(
-                              width: double.infinity,
-                              child: Padding(
-                                padding: const EdgeInsets.symmetric(
-                                  vertical: 14,
-                                ),
-                                child: Text(
-                                  _selectedGerobakName,
-                                  style: const TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w600,
-                                    color: Colors.black87,
+                  )
+                : RefreshIndicator(
+                    onRefresh: loadReports,
+                    child: SingleChildScrollView(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      child: Column(
+                        children: [
+                          AppHeader(
+                            subtitle: todayText,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 12),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: SizedBox(
+                                width: double.infinity,
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 14,
+                                  ),
+                                  child: Text(
+                                    _selectedGerobakName,
+                                    style: const TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.black87,
+                                    ),
                                   ),
                                 ),
                               ),
                             ),
                           ),
-                        ),
-                        const SizedBox(height: 12),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 12),
-                          child: _buildSectionCard(
-                            title: _isRider
-                                ? "Laporan ${_selectedGerobakName}"
-                                : "Laporan Keseluruhan",
+                          const SizedBox(height: 12),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 12),
+                            child: _buildSectionCard(
+                              title: _isRider
+                                  ? "Laporan ${_selectedGerobakName}"
+                                  : "Laporan Keseluruhan",
+                              child: Row(
+                                children: [
+                                  Expanded(
+                                    child: _buildActionButton(
+                                      icon: Icons.table_chart_outlined,
+                                      label: "Lihat Spreadsheet",
+                                      onTap: _openSpreadsheet,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: _buildActionButton(
+                                      icon: Icons.download_outlined,
+                                      label: "Download Report",
+                                      onTap: _downloadReport,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 12),
                             child: Row(
                               children: [
                                 Expanded(
-                                  child: _buildActionButton(
-                                    icon: Icons.table_chart_outlined,
-                                    label: "Lihat Spreadsheet",
-                                    onTap: _openSpreadsheet,
+                                  child: _buildSummaryCard(
+                                    icon: Icons.payments_outlined,
+                                    title: "Total Revenue",
+                                    value: formatRupiah(totalRevenue),
+                                    iconBg: Colors.black.withAlpha(12),
+                                    iconColor: Colors.black,
                                   ),
                                 ),
                                 const SizedBox(width: 10),
                                 Expanded(
-                                  child: _buildActionButton(
-                                    icon: Icons.download_outlined,
-                                    label: "Download Report",
-                                    onTap: _downloadReport,
+                                  child: _buildSummaryCard(
+                                    icon: Icons.receipt_long_outlined,
+                                    title: "Total Orders",
+                                    value: "$totalOrders",
+                                    iconBg: Colors.black.withAlpha(12),
+                                    iconColor: Colors.black,
                                   ),
                                 ),
                               ],
                             ),
                           ),
-                        ),
-                        const SizedBox(height: 12),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 12),
-                          child: Row(
-                            children: [
-                              Expanded(
-                                child: _buildSummaryCard(
-                                  icon: Icons.payments_outlined,
-                                  title: "Total Revenue",
-                                  value: formatRupiah(totalRevenue),
-                                  iconBg: Colors.orange.withAlpha(20),
-                                  iconColor: Colors.orange,
-                                ),
-                              ),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: _buildSummaryCard(
-                                  icon: Icons.receipt_long_outlined,
-                                  title: "Total Orders",
-                                  value: "$totalOrders",
-                                  iconBg: Colors.amber.withAlpha(20),
-                                  iconColor: Colors.amber.shade700,
-                                ),
-                              ),
-                            ],
+                          const SizedBox(height: 10),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 12),
+                            child: _buildSummaryCard(
+                              icon: Icons.analytics_outlined,
+                              title: "Avg Order Value",
+                              value: formatRupiah(averageOrderValue),
+                              iconBg: Colors.black.withAlpha(12),
+                              iconColor: Colors.black,
+                              fullWidth: true,
+                            ),
                           ),
-                        ),
-                        const SizedBox(height: 10),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 12),
-                          child: _buildSummaryCard(
-                            icon: Icons.analytics_outlined,
-                            title: "Avg Order Value",
-                            value: formatRupiah(averageOrderValue),
-                            iconBg: Colors.brown.withAlpha(18),
-                            iconColor: Colors.brown,
-                            fullWidth: true,
+                          const SizedBox(height: 14),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 12),
+                            child: _buildSectionCard(
+                              title: "Daily Overview",
+                              child: totalRevenue == 0 && totalOrders == 0
+                                  ? const EmptyState(
+                                      icon: Icons.insights_outlined,
+                                      title: 'Belum ada data hari ini',
+                                      subtitle:
+                                          'Data revenue dan order harian akan muncul setelah ada transaksi.',
+                                    )
+                                  : Row(
+                                      children: [
+                                        Expanded(
+                                          child: _buildMiniStat(
+                                            label: "Revenue",
+                                            value: formatRupiah(totalRevenue),
+                                            color: Colors.black,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 10),
+                                        Expanded(
+                                          child: _buildMiniStat(
+                                            label: "Orders",
+                                            value: "$totalOrders",
+                                            color: Colors.black,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                            ),
                           ),
-                        ),
-                        const SizedBox(height: 14),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 12),
-                          child: _buildSectionCard(
-                            title: "Daily Overview",
-                            child: totalRevenue == 0 && totalOrders == 0
-                                ? const EmptyState(
-                                    icon: Icons.insights_outlined,
-                                    title: 'Belum ada data hari ini',
-                                    subtitle:
-                                        'Data revenue dan order harian akan muncul setelah ada transaksi.',
-                                  )
-                                : Row(
-                                    children: [
-                                      Expanded(
-                                        child: _buildMiniStat(
-                                          label: "Revenue",
-                                          value: formatRupiah(totalRevenue),
-                                          color: Colors.orange,
+                          const SizedBox(height: 20),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 12),
+                            child: _buildSectionCard(
+                              title: "Weekly Snapshot",
+                              child: weeklyRevenue == 0 && weeklyOrders == 0
+                                  ? const EmptyState(
+                                      icon: Icons.calendar_view_week_outlined,
+                                      title: 'Belum ada data minggu ini',
+                                      subtitle:
+                                          'Data mingguan akan tampil kalau sudah ada transaksi minggu ini.',
+                                    )
+                                  : Row(
+                                      children: [
+                                        Expanded(
+                                          child: _buildMiniStat(
+                                            label: "Revenue",
+                                            value: formatRupiah(weeklyRevenue),
+                                            color: Colors.black,
+                                          ),
                                         ),
-                                      ),
-                                      const SizedBox(width: 10),
-                                      Expanded(
-                                        child: _buildMiniStat(
-                                          label: "Orders",
-                                          value: "$totalOrders",
-                                          color: Colors.amber.shade700,
+                                        const SizedBox(width: 10),
+                                        Expanded(
+                                          child: _buildMiniStat(
+                                            label: "Orders",
+                                            value: "$weeklyOrders",
+                                            color: Colors.black,
+                                          ),
                                         ),
-                                      ),
-                                    ],
-                                  ),
+                                      ],
+                                    ),
+                            ),
                           ),
-                        ),
-                        const SizedBox(height: 20),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 12),
-                          child: _buildSectionCard(
-                            title: "Weekly Snapshot",
-                            child: weeklyRevenue == 0 && weeklyOrders == 0
-                                ? const EmptyState(
-                                    icon: Icons.calendar_view_week_outlined,
-                                    title: 'Belum ada data minggu ini',
-                                    subtitle:
-                                        'Data mingguan akan tampil kalau sudah ada transaksi minggu ini.',
-                                  )
-                                : Row(
-                                    children: [
-                                      Expanded(
-                                        child: _buildMiniStat(
-                                          label: "Revenue",
-                                          value: formatRupiah(weeklyRevenue),
-                                          color: Colors.orange,
-                                        ),
-                                      ),
-                                      const SizedBox(width: 10),
-                                      Expanded(
-                                        child: _buildMiniStat(
-                                          label: "Orders",
-                                          value: "$weeklyOrders",
-                                          color: Colors.amber.shade700,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                          ),
-                        ),
-                        const SizedBox(height: 20),
-                      ],
+                          const SizedBox(height: 20),
+                        ],
+                      ),
                     ),
                   ),
-                ),
+      ),
     );
   }
 

@@ -291,7 +291,11 @@ class _HomeScreenState extends State<HomeScreen> {
                           Expanded(
                             child: Text(
                               _selectedGerobakName,
-                              style: const TextStyle(fontSize: 16),
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.black87,
+                              ),
                             ),
                           ),
                         ],
@@ -572,33 +576,42 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _miniStat(String title, String value, IconData icon, Color color) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: color.withAlpha(20),
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Row(
-        children: [
-          Icon(icon, color: color),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(title, style: const TextStyle(fontSize: 12)),
-                const SizedBox(height: 4),
-                Text(
-                  value,
-                  style: const TextStyle(fontWeight: FontWeight.bold),
+  return Container(
+    padding: const EdgeInsets.all(12),
+    decoration: BoxDecoration(
+      color: Colors.black.withAlpha(8),
+      borderRadius: BorderRadius.circular(16),
+    ),
+    child: Row(
+      children: [
+        Icon(icon, color: Colors.black),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: Colors.black54,
                 ),
-              ],
-            ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                value,
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black87,
+                ),
+              ),
+            ],
           ),
-        ],
-      ),
-    );
-  }
+        ),
+      ],
+    ),
+  );
+}
 
   Widget _sectionCard(String title, Widget child) {
     return Container(

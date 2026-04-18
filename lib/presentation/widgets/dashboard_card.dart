@@ -28,12 +28,12 @@ class DashboardCard extends StatelessWidget {
             width: 42,
             height: 42,
             decoration: BoxDecoration(
-              color: color.withAlpha(24),
+              color: Colors.black.withAlpha(12),
               borderRadius: BorderRadius.circular(14),
             ),
             child: Icon(
               icon,
-              color: color,
+              color: Colors.black,
               size: 22,
             ),
           ),
@@ -57,10 +57,10 @@ class DashboardCard extends StatelessWidget {
                   value,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
+                  style: const TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.bold,
-                    color: color,
+                    color: Colors.black87,
                   ),
                 ),
               ],
