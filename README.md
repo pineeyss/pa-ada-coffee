@@ -141,7 +141,7 @@ lib
 4. lihat/edit profile
 
 
-## Databse
+## Database
 
 untuk database, dalam pengembangan aplikasi Ad A Coffee, disini kami menggunakan Supabase. SUpabase sendiri pada dasarnya adalah database relasional berbasis cloud yang menggunakan PostgreSQL sebagai inti sistemnya. Artinya, Supabase bukan sekadar “tempat menyimpan data”, tapi database SQL lengkap yang sudah siap pakai tanpa perlu instalasi manual.
 
