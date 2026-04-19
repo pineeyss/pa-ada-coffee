@@ -32,9 +32,10 @@ Pengembangan aplikasi ini bertujuan untuk:
 
 ## Teknologi yang Digunakan
 - Flutter (SDK ^3.10.8)
-- Supabase → Backend as a Service (Database & Auth)
-- fl_chart → Visualisasi data (grafik)
-- intl → Formatting (mata uang, tanggal, dll)
+- Supabase -> Backend as a Service (Database & Auth)
+- fl_chart -> Visualisasi data (grafik)
+- intl -> Formatting (mata uang, tanggal, dll)
+- Spreadsheets -> untuk menyalin, mengelola, dan menyimpan data agar lebih mudah ditampilkan.
 
 ## Cara Menjalankan
 
