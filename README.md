@@ -135,6 +135,12 @@ lib
 
 ## Fitur Aplikasi
 
+1. Login/Register
+2. CRUD Menu
+3. Rekap data penjualan
+4. lihat/edit profile
+
+
 ## Databse
 
 untuk database, dalam pengembangan aplikasi Ad A Coffee, disini kami menggunakan Supabase. SUpabase sendiri pada dasarnya adalah database relasional berbasis cloud yang menggunakan PostgreSQL sebagai inti sistemnya. Artinya, Supabase bukan sekadar “tempat menyimpan data”, tapi database SQL lengkap yang sudah siap pakai tanpa perlu instalasi manual.
@@ -326,6 +332,77 @@ ElevatedButton(
 
 
 ## Halaman Aplikasi
+
+### Login/Register
+
+1. Login
+
+
+<img width="419" height="540" alt="image" src="https://github.com/user-attachments/assets/8e8b0792-fd16-4a5c-b643-0fa0b8c7867f" />
+
+
+user harus memasukkan email pada kolom email, dan password pada kolom password. Jika user belum memiliki akun, maka lanjut ke halaman register
+
+2. Register
+
+
+<img width="414" height="534" alt="image" src="https://github.com/user-attachments/assets/dab2f8f7-9d1b-43c8-9cca-9385a8ed3ad7" />
+
+user mesti memasukkan nama, email, dan password, serta memilih owner pada aplikasi.
+
+
+### Home
+
+
+<img width="427" height="551" alt="image" src="https://github.com/user-attachments/assets/7eb5eec2-313e-45f9-844f-8f4a4d7e7511" />
+
+
+pada bagian home terdapat tampilan penjualan, dan order, dan terdapat tampilan top selling. Juga terdapat navigasi pada bottom aplikasi
+
+
+### Sales
+
+
+<img width="450" height="580" alt="image" src="https://github.com/user-attachments/assets/628175f2-61c1-49f9-ab98-8381b61f6e0e" />
+
+
+Pada bagian sales terdapat menu.
+
+
+### Stock & Menu Management
+
+
+<img width="473" height="610" alt="image" src="https://github.com/user-attachments/assets/eb11ed88-e061-4b52-8243-da2917a5e25f" />
+
+
+Pada bagian ini terdapat daftar menu, tambah/edit menu, serta harga & item management seperti Monitoring stok barang dan juga Update stok
+
+
+### Reports
+
+
+<img width="365" height="471" alt="image" src="https://github.com/user-attachments/assets/01b3eb2d-cf5d-47e5-87ec-2ca770fef5f8" />
+
+
+pada bagian ini terdapat laporan penjualan dan rekap data dalam bentuk harian dan bulanan.
+
+
+### Profile
+
+
+<img width="406" height="523" alt="image" src="https://github.com/user-attachments/assets/ce480a28-8cc8-4069-99f6-3625eed62e58" />
+
+
+pada bagian ini menampilkan profile user
+
+
+### Contoh Pembelian (sales)
+
+
+<img width="385" height="496" alt="image" src="https://github.com/user-attachments/assets/e4cf34cd-2bf9-4f2e-b598-d488e25a1e29" />
+
+
+pada bagian ini adalah contohh untuk pengurangan stok atau melakukan pembelian.
 
 ## Kesimpulan
 Aplikasi Ad A Coffee merupakan implementasi sistem informasi berbasis mobile yang dirancang untuk mendukung pengelolaan operasional coffee shop secara terintegrasi. Sistem ini menggabungkan berbagai fungsi utama seperti manajemen menu, transaksi penjualan, pengelolaan stok, serta penyajian laporan dalam satu platform yang terstruktur. Dengan memanfaatkan Flutter sebagai framework utama dan Supabase sebagai backend service, aplikasi ini mampu menghadirkan pengolahan data secara real-time dengan arsitektur yang modular dan terorganisir. Secara keseluruhan, aplikasi ini menunjukkan penerapan konsep pengembangan perangkat lunak yang sistematis, mulai dari pemisahan layer hingga integrasi layanan backend, sehingga mampu memenuhi kebutuhan dasar sistem informasi pada skala bisnis coffee shop.
