@@ -137,6 +137,86 @@ lib
 
 ## Databse
 
+untuk database, dalam pengembangan aplikasi Ad A Coffee, disini kami menggunakan Supabase. SUpabase sendiri pada dasarnya adalah database relasional berbasis cloud yang menggunakan PostgreSQL sebagai inti sistemnya. Artinya, Supabase bukan sekadar “tempat menyimpan data”, tapi database SQL lengkap yang sudah siap pakai tanpa perlu instalasi manual.
+
+### Relasional
+
+
+<img width="1321" height="729" alt="image" src="https://github.com/user-attachments/assets/61ccffc6-27f0-468d-9c46-fbc79b53253d" />
+
+Relasi pada skema tersebut menggambarkan alur data dari identitas pengguna hingga proses transaksi penjualan dalam satu sistem yang saling terhubung. Pada bagian awal, tabel profiles berperan sebagai penyimpan data utama pengguna, seperti nama, email, dan peran. Tabel ini terhubung langsung dengan tabel riders, di mana setiap rider merepresentasikan pengguna yang memiliki peran operasional di lapangan. Hubungan antara keduanya bersifat satu-ke-satu, karena satu akun pengguna hanya diasosiasikan dengan satu rider.
+
+
+Selanjutnya, rider memiliki keterkaitan dengan tabel gerobak, yang menunjukkan bahwa setiap gerobak dikelola oleh seorang rider. Hubungan ini bersifat satu-ke-banyak, karena satu rider dapat mengelola lebih dari satu gerobak, sementara satu gerobak hanya dimiliki oleh satu rider. Dari gerobak inilah aktivitas bisnis utama berlangsung, termasuk pengelolaan menu dan transaksi.
+
+
+Tabel menu berfungsi sebagai data master yang menyimpan daftar produk yang dijual. Relasi antara gerobak dan menu tidak langsung, melainkan melalui tabel stok_gerobak. Tabel ini menjadi penghubung yang merepresentasikan hubungan banyak-ke-banyak, karena satu gerobak dapat memiliki banyak jenis menu dan satu menu yang sama bisa tersedia di beberapa gerobak. Selain sebagai penghubung, tabel ini juga menyimpan atribut penting seperti stok awal dan stok saat ini, yang menunjukkan bahwa relasi tersebut tidak hanya bersifat struktural tetapi juga operasional.
+
+
+Dalam konteks transaksi, tabel transaksi mencatat setiap aktivitas pembelian yang terjadi pada suatu gerobak dan dilakukan oleh rider tertentu. Hubungan ini menunjukkan bahwa satu gerobak dapat menghasilkan banyak transaksi, dan seorang rider juga dapat terlibat dalam banyak transaksi. Untuk merinci isi setiap transaksi, digunakan tabel detail_transaksi yang menghubungkan transaksi dengan menu. Di sinilah terbentuk kembali relasi banyak-ke-banyak, karena satu transaksi bisa terdiri dari beberapa item menu, dan satu menu dapat muncul dalam berbagai transaksi yang berbeda. Tabel ini juga menyimpan informasi kuantitas, harga, dan subtotal, sehingga berperan penting dalam perhitungan nilai transaksi secara keseluruhan.
+
+
+Secara keseluruhan, struktur relasi ini membentuk alur yang sistematis, dimulai dari identitas pengguna, kemudian ke pengelola (rider), dilanjutkan ke unit bisnis (gerobak), lalu ke produk (menu), hingga akhirnya ke aktivitas penjualan (transaksi dan detailnya). Pola ini mencerminkan penerapan database relasional yang terorganisir dengan baik, di mana setiap entitas memiliki peran spesifik dan saling terhubung melalui kunci relasi yang menjaga konsistensi serta integritas data.
+
+
+### Tabel
+
+
+<img width="1551" height="597" alt="image" src="https://github.com/user-attachments/assets/199b86ae-4f59-4528-bfba-482927c17ea0" />
+
+
+disini dalam aplikasi yanh kami kembangkan, kami membuat 8 tabel yaitu tabel detail_transaksi, gerobak, menu, profiles, riders, stock_outlet, stok_gerobak, dan transaksi.
+
+
+#### Tabel detail_transaksi
+
+
+<img width="1532" height="469" alt="image" src="https://github.com/user-attachments/assets/430cdf7f-d757-40c3-807e-778ed5cd9d00" />
+
+
+#### Tabel gerobak
+
+
+<img width="1570" height="425" alt="image" src="https://github.com/user-attachments/assets/cd7304ce-4480-44fd-bae2-31da39983bf3" />
+
+
+#### Tabel menu
+
+
+<img width="1573" height="604" alt="image" src="https://github.com/user-attachments/assets/9b15f50e-b06d-41de-a16d-d784eee411fa" />
+
+
+#### Tabel Profiles
+
+
+<img width="1536" height="489" alt="image" src="https://github.com/user-attachments/assets/679f5924-0c57-4cef-aa15-eb2c4b4db3c9" />
+
+
+#### Tabel riders
+
+
+<img width="1572" height="421" alt="image" src="https://github.com/user-attachments/assets/7f1cd1a4-012c-4712-b3a9-536504326915" />
+
+
+#### Tabel stock_outlet
+
+
+<img width="1562" height="423" alt="image" src="https://github.com/user-attachments/assets/f3b4bb7f-9511-41b7-8f27-e0de2da9b56f" />
+
+
+#### Tabel Stok_Gerobak
+
+
+<img width="1585" height="512" alt="image" src="https://github.com/user-attachments/assets/9c3e405a-9293-4663-9201-ac9e2aa473fc" />
+
+
+#### Tabel Transaksi
+
+
+<img width="1553" height="472" alt="image" src="https://github.com/user-attachments/assets/845179b6-0189-4640-9fe8-9b17eb6f868e" />
+
+
+
 ## Widget yang Digunakan
 
 Dalam pengembangan aplikasi Ad A Coffee, berbagai widget Flutter dimanfaatkan untuk membangun antarmuka yang responsif, modular, dan mudah dipelihara. Penggunaan widget dibagi menjadi dua kategori utama, yaitu built-in widget (bawaan Flutter) dan custom widget (komponen buatan sendiri).
