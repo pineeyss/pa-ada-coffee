@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+
+import '../../data/services/stock_service.dart';
+
 import '../dashboard/home_screen.dart';
 import '../sales/sales_screen.dart';
 import '../stock/stock_screen.dart';
@@ -23,11 +26,32 @@ class _MainNavigationState extends State<MainNavigation> {
   List<Widget> _pages = const [];
   List<NavigationDestination> _destinations = const [];
 
+  // =========================
+  // 🔥 INIT (STEP 3 MASUK SINI)
+  // =========================
+
   @override
   void initState() {
     super.initState();
-    _loadRoleAndSetupNavigation();
+    _initApp();
   }
+
+  Future<void> _initApp() async {
+    try {
+      // 🔥 reset stock harian (AUTO)
+      await StockService().resetStockIfNewDay();
+
+      // 🔥 lanjut load role & navigation
+      await _loadRoleAndSetupNavigation();
+    } catch (e) {
+      debugPrint('Init app error: $e');
+      await _loadRoleAndSetupNavigation();
+    }
+  }
+
+  // =========================
+  // LOAD ROLE
+  // =========================
 
   Future<void> _loadRoleAndSetupNavigation() async {
     try {
@@ -49,9 +73,12 @@ class _MainNavigationState extends State<MainNavigation> {
           .eq('id', user.id)
           .maybeSingle();
 
-      final userRole = (profile?['role'] ?? 'owner').toString().toLowerCase();
+      final userRole = (profile?['role'] ?? 'owner')
+          .toString()
+          .toLowerCase();
 
       if (!mounted) return;
+
       setState(() {
         role = userRole;
         isLoading = false;
@@ -64,6 +91,7 @@ class _MainNavigationState extends State<MainNavigation> {
       });
     } catch (e) {
       if (!mounted) return;
+
       setState(() {
         isLoading = false;
         role = 'owner';
@@ -71,6 +99,10 @@ class _MainNavigationState extends State<MainNavigation> {
       });
     }
   }
+
+  // =========================
+  // OWNER NAVIGATION
+  // =========================
 
   void _setupOwnerNavigation() {
     _pages = const [
@@ -110,11 +142,15 @@ class _MainNavigationState extends State<MainNavigation> {
     ];
   }
 
+  // =========================
+  // RIDER NAVIGATION
+  // =========================
+
   void _setupRiderNavigation() {
     _pages = const [
       HomeScreen(),
       SalesScreen(),
-      StockScreen(),
+      ReportsScreen(),
       ProfileScreen(),
     ];
 
@@ -130,9 +166,9 @@ class _MainNavigationState extends State<MainNavigation> {
         label: 'Sales',
       ),
       NavigationDestination(
-        icon: Icon(Icons.inventory_2_outlined),
-        selectedIcon: Icon(Icons.inventory_2),
-        label: 'Stock',
+        icon: Icon(Icons.bar_chart_outlined),
+        selectedIcon: Icon(Icons.bar_chart),
+        label: 'Reports',
       ),
       NavigationDestination(
         icon: Icon(Icons.person_outline),
@@ -146,11 +182,19 @@ class _MainNavigationState extends State<MainNavigation> {
     }
   }
 
+  // =========================
+  // NAVIGATION HANDLER
+  // =========================
+
   void _onItemTapped(int index) {
     setState(() {
       _selectedIndex = index;
     });
   }
+
+  // =========================
+  // UI STYLE
+  // =========================
 
   MaterialStateProperty<IconThemeData?> _iconTheme() {
     return MaterialStateProperty.resolveWith((states) {
@@ -185,6 +229,10 @@ class _MainNavigationState extends State<MainNavigation> {
       );
     });
   }
+
+  // =========================
+  // BUILD
+  // =========================
 
   @override
   Widget build(BuildContext context) {
