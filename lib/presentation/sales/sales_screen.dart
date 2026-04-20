@@ -497,18 +497,10 @@ class _SalesScreenState extends State<SalesScreen> {
   }
 
   void _showSuccess() {
-    showDialog(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text("Berhasil"),
-        content: const Text("Transaksi berhasil disimpan"),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text("OK"),
-          ),
-        ],
-      ),
+    DialogHelper.success(
+      context,
+      title: "Berhasil",
+      message: "Transaksi berhasil disimpan",
     );
   }
 
@@ -623,15 +615,13 @@ class _SalesScreenState extends State<SalesScreen> {
     final isLowStock = stock > 0 && stock < 5;
 
     return GestureDetector(
-      onTap: isOutOfStock
-          ? null
-          : () {
-              setState(() {
-                selectedItem = item;
-                qty = 1;
-                payment = null;
-              });
-            },
+      onTap: () {
+        setState(() {
+          selectedItem = item;
+          qty = 1;
+          payment = null;
+        });
+      },
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 180),
         padding: const EdgeInsets.fromLTRB(10, 10, 10, 12),

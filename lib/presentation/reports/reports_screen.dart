@@ -1,5 +1,6 @@
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../data/services/report_service.dart';
 import '../../data/services/stock_service.dart';
 import '../../utils/currency_formatter.dart';
@@ -26,6 +27,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
 
   List<Map<String, dynamic>> gerobakOptions = [];
   String? selectedGerobakId;
+  String role = 'owner';
 
   String get _selectedGerobakName {
     if (gerobakOptions.isEmpty || selectedGerobakId == null) return '-';
@@ -77,11 +79,13 @@ class _ReportsScreenState extends State<ReportsScreen> {
         });
       }
 
+      final userRole = await _stockService.getCurrentUserRole();
       final gerobaks = await _stockService.getGerobakOptionsByRole();
 
       if (gerobaks.isEmpty) {
         if (!mounted) return;
         setState(() {
+          role = userRole;
           gerobakOptions = [];
           selectedGerobakId = null;
           totalRevenue = 0;
@@ -107,6 +111,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
 
       if (!mounted) return;
       setState(() {
+        role = userRole;
         gerobakOptions = gerobaks;
         selectedGerobakId = selectedId;
       });
@@ -171,40 +176,88 @@ class _ReportsScreenState extends State<ReportsScreen> {
     }
   }
 
+  Future<void> _openSpreadsheet() async {
+    final url = _reportService.getSpreadsheetUrl(
+      role: role,
+      gerobakId: selectedGerobakId,
+      gerobakName: _selectedGerobakName,
+    );
+
+    if (url == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Spreadsheet URL tidak tersedia')),
+      );
+      return;
+    }
+
+    final uri = Uri.parse(url);
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Gagal membuka spreadsheet')),
+      );
+    }
+  }
+
+  Future<void> _downloadReport() async {
+    final url = _reportService.getDownloadUrl(
+      role: role,
+      gerobakId: selectedGerobakId,
+      gerobakName: _selectedGerobakName,
+    );
+
+    if (url == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Download URL tidak tersedia')),
+      );
+      return;
+    }
+
+    final uri = Uri.parse(url);
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Gagal memulai download')),
+      );
+    }
+  }
+
   String formatRupiah(int value) {
     return CurrencyFormatter.format(value);
   }
 
   String get todayText {
-  final now = DateTime.now();
+    final now = DateTime.now();
 
-  const days = [
-    'Senin',
-    'Selasa',
-    'Rabu',
-    'Kamis',
-    'Jumat',
-    'Sabtu',
-    'Minggu',
-  ];
+    const days = [
+      'Senin',
+      'Selasa',
+      'Rabu',
+      'Kamis',
+      'Jumat',
+      'Sabtu',
+      'Minggu',
+    ];
 
-  const months = [
-    'Januari',
-    'Februari',
-    'Maret',
-    'April',
-    'Mei',
-    'Juni',
-    'Juli',
-    'Agustus',
-    'September',
-    'Oktober',
-    'November',
-    'Desember',
-  ];
+    const months = [
+      'Januari',
+      'Februari',
+      'Maret',
+      'April',
+      'Mei',
+      'Juni',
+      'Juli',
+      'Agustus',
+      'September',
+      'Oktober',
+      'November',
+      'Desember',
+    ];
 
-  return '${days[now.weekday - 1]}, ${now.day} ${months[now.month - 1]} ${now.year}';
-}
+    return '${days[now.weekday - 1]}, ${now.day} ${months[now.month - 1]} ${now.year}';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -233,7 +286,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
                           style: const TextStyle(
                             fontSize: 14,
                             color: Colors.black54,
-                          ), 
+                          ),
                         ),
                       ],
                     ),
@@ -245,32 +298,32 @@ class _ReportsScreenState extends State<ReportsScreen> {
                       child: Column(
                         children: [
                           AppHeader(
-                  subtitle: todayText,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 12,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            _selectedGerobakName,
-                            style: const TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.black87,
+                            subtitle: todayText,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 12,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      _selectedGerobakName,
+                                      style: const TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.bold,
+                                        color: Colors.black87,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
                           ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
                           const SizedBox(height: 12),
                           Padding(
                             padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -309,12 +362,70 @@ class _ReportsScreenState extends State<ReportsScreen> {
                             padding: const EdgeInsets.symmetric(horizontal: 12),
                             child: _buildDailyOverviewChart(),
                           ),
+                          if (role != 'rider') ...[
+                            const SizedBox(height: 16),
+                            Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 12),
+                              child: _buildActionButtons(),
+                            ),
+                          ],
                           const SizedBox(height: 24),
                         ],
                       ),
                     ),
                   ),
       ),
+    );
+  }
+
+  Widget _buildActionButtons() {
+    return Column(
+      children: [
+        SizedBox(
+          width: double.infinity,
+          child: ElevatedButton.icon(
+            onPressed: _openSpreadsheet,
+            icon: const Icon(Icons.table_view_outlined, color: Colors.white),
+            label: const Text(
+              "View Spreadsheet Report",
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF1D6F42), // Excel green
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        SizedBox(
+          width: double.infinity,
+          child: OutlinedButton.icon(
+            onPressed: _downloadReport,
+            icon: const Icon(Icons.download_for_offline_outlined,
+                color: Colors.black87),
+            label: const Text(
+              "Download Excel (.xlsx)",
+              style: TextStyle(
+                color: Colors.black87,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            style: OutlinedButton.styleFrom(
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              side: const BorderSide(color: Colors.black12, width: 1.5),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 
@@ -386,7 +497,8 @@ class _ReportsScreenState extends State<ReportsScreen> {
   }
 
   Widget _buildDailyOverviewChart() {
-    final bool hasData = totalRevenue > 0 || totalOrders > 0 || averageOrderValue > 0;
+    final bool hasData =
+        totalRevenue > 0 || totalOrders > 0 || averageOrderValue > 0;
 
     final spots = <FlSpot>[
       FlSpot(0, totalRevenue.toDouble()),
