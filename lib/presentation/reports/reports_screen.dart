@@ -1,12 +1,10 @@
+import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
 import '../../data/services/report_service.dart';
 import '../../data/services/stock_service.dart';
 import '../../utils/currency_formatter.dart';
-import '../widgets/empty_state.dart';
 import '../widgets/header.dart';
 import '../../core/supabase/selected_gerobak_store.dart';
-import '../../data/services/google_sheet_service.dart';
 
 class ReportsScreen extends StatefulWidget {
   const ReportsScreen({super.key});
@@ -20,23 +18,14 @@ class _ReportsScreenState extends State<ReportsScreen> {
   final StockService _stockService = StockService();
 
   bool isLoading = true;
-  bool _isSyncingSheet = false;
-  bool _isSyncingHistoryAuto = false;
-  bool _hasSyncedHistoryOnce = false;
-  String? _lastSyncedHistoryGerobakId;
   String? errorMessage;
 
   int totalRevenue = 0;
   int totalOrders = 0;
   int averageOrderValue = 0;
-  int weeklyRevenue = 0;
-  int weeklyOrders = 0;
 
   List<Map<String, dynamic>> gerobakOptions = [];
   String? selectedGerobakId;
-  String _role = 'owner';
-
-  bool get _isRider => _role == 'rider';
 
   String get _selectedGerobakName {
     if (gerobakOptions.isEmpty || selectedGerobakId == null) return '-';
@@ -74,8 +63,6 @@ class _ReportsScreenState extends State<ReportsScreen> {
 
     setState(() {
       selectedGerobakId = newId;
-      _hasSyncedHistoryOnce = false;
-      _lastSyncedHistoryGerobakId = null;
     });
 
     loadReports();
@@ -90,20 +77,16 @@ class _ReportsScreenState extends State<ReportsScreen> {
         });
       }
 
-      final role = await _stockService.getCurrentUserRole();
       final gerobaks = await _stockService.getGerobakOptionsByRole();
 
       if (gerobaks.isEmpty) {
         if (!mounted) return;
         setState(() {
-          _role = role;
           gerobakOptions = [];
           selectedGerobakId = null;
           totalRevenue = 0;
           totalOrders = 0;
           averageOrderValue = 0;
-          weeklyRevenue = 0;
-          weeklyOrders = 0;
           isLoading = false;
           errorMessage = 'Data gerobak kosong';
         });
@@ -113,8 +96,8 @@ class _ReportsScreenState extends State<ReportsScreen> {
       final storeId = SelectedGerobakStore.selectedGerobakId;
 
       final selected = gerobaks.any(
-        (item) => item['id']?.toString() == storeId,
-      )
+              (item) => item['id']?.toString() == storeId,
+            )
           ? gerobaks.firstWhere(
               (item) => item['id']?.toString() == storeId,
             )
@@ -124,11 +107,8 @@ class _ReportsScreenState extends State<ReportsScreen> {
 
       if (!mounted) return;
       setState(() {
-        _role = role;
         gerobakOptions = gerobaks;
         selectedGerobakId = selectedId;
-        _hasSyncedHistoryOnce = false;
-        _lastSyncedHistoryGerobakId = null;
       });
 
       if (SelectedGerobakStore.selectedGerobak.value == null) {
@@ -173,28 +153,15 @@ class _ReportsScreenState extends State<ReportsScreen> {
         gerobakId: selectedGerobakId,
       );
 
-      final weeklyRev = await _reportService.getWeeklyRevenue(
-        gerobakId: selectedGerobakId,
-      );
-
-      final weeklyOrd = await _reportService.getWeeklyOrders(
-        gerobakId: selectedGerobakId,
-      );
-
       final avg = orders > 0 ? (revenue / orders).round() : 0;
 
       if (!mounted) return;
       setState(() {
         totalRevenue = revenue;
         totalOrders = orders;
-        weeklyRevenue = weeklyRev;
-        weeklyOrders = weeklyOrd;
         averageOrderValue = avg;
         isLoading = false;
       });
-
-      await _autoSyncToSpreadsheet();
-      await _autoSyncHistoricalReports();
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -204,143 +171,40 @@ class _ReportsScreenState extends State<ReportsScreen> {
     }
   }
 
-  // 🔥 CARI INI DAN GANTI
-
-Future<void> _autoSyncToSpreadsheet() async {
-  if (_isSyncingSheet || selectedGerobakId == null) return;
-
-  _isSyncingSheet = true;
-
-  try {
-    await GoogleSheetService.sendReport(
-      tanggal: todayText,
-      gerobakId: selectedGerobakId!,
-      gerobakName: _selectedGerobakName,
-      name: _selectedGerobakName,
-      email: 'owner@email.com',
-      role: _role,
-      totalRevenue: totalRevenue,
-      totalOrders: totalOrders,
-      averageOrderValue: averageOrderValue,
-    );
-  } catch (e) {
-    debugPrint('Spreadsheet error: $e');
-  } finally {
-    _isSyncingSheet = false;
-  }
-}
-
-  Future<void> _autoSyncHistoricalReports() async {
-    if (_isSyncingHistoryAuto || selectedGerobakId == null) return;
-
-    final shouldSkip = _hasSyncedHistoryOnce &&
-        _lastSyncedHistoryGerobakId == selectedGerobakId;
-
-    if (shouldSkip) return;
-
-    _isSyncingHistoryAuto = true;
-
-    try {
-      final history = await _reportService.getHistoricalDailySummaries(
-        gerobakId: selectedGerobakId!,
-      );
-
-      if (history.isEmpty) {
-        _hasSyncedHistoryOnce = true;
-        _lastSyncedHistoryGerobakId = selectedGerobakId;
-        return;
-      }
-
-      final payload = history.map((item) {
-        return {
-          'action': 'sync_report',
-          'syncType': 'historical_summary',
-          'syncKey': '${item['gerobakId']}_${item['tanggal']}',
-          'tanggal': item['tanggal'],
-          'gerobakId': item['gerobakId'],
-          'gerobakName': _selectedGerobakName,
-          'name': _selectedGerobakName,
-          'email': 'owner@email.com',
-          'role': _role,
-          'totalRevenue': item['totalRevenue'],
-          'totalOrders': item['totalOrders'],
-          'averageOrderValue': item['averageOrderValue'],
-        };
-      }).toList();
-
-      final success = await GoogleSheetService.sendHistoricalReports(
-        reports: payload,
-      );
-
-      if (success) {
-        _hasSyncedHistoryOnce = true;
-        _lastSyncedHistoryGerobakId = selectedGerobakId;
-      }
-    } catch (e) {
-      if (mounted) {
-        _showSnackBar('Error sinkron histori laporan: $e');
-      }
-    } finally {
-      _isSyncingHistoryAuto = false;
-    }
-  }
-
-  Future<void> _openSpreadsheet() async {
-    final url = _reportService.getSpreadsheetUrl(
-      role: _role,
-      gerobakId: selectedGerobakId,
-      gerobakName: _selectedGerobakName,
-    );
-
-    if (url == null || url.isEmpty || url.startsWith('ISI_LINK_')) {
-      _showSnackBar('Link spreadsheet belum diisi');
-      return;
-    }
-
-    final uri = Uri.parse(url);
-
-    if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
-      _showSnackBar('Gagal membuka spreadsheet');
-    }
-  }
-
-  Future<void> _downloadReport() async {
-    final url = _reportService.getDownloadUrl(
-      role: _role,
-      gerobakId: selectedGerobakId,
-      gerobakName: _selectedGerobakName,
-    );
-
-    if (url == null || url.isEmpty || url.startsWith('ISI_LINK_')) {
-      _showSnackBar('Link download report belum diisi');
-      return;
-    }
-
-    final uri = Uri.parse(url);
-
-    if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) {
-      _showSnackBar('Gagal membuka report');
-    }
-  }
-
-  void _showSnackBar(String msg) {
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(msg)),
-    );
-  }
-
   String formatRupiah(int value) {
     return CurrencyFormatter.format(value);
   }
 
   String get todayText {
-    final now = DateTime.now();
-    final day = now.day.toString().padLeft(2, '0');
-    final month = now.month.toString().padLeft(2, '0');
-    final year = now.year;
-    return '$day/$month/$year';
-  }
+  final now = DateTime.now();
+
+  const days = [
+    'Senin',
+    'Selasa',
+    'Rabu',
+    'Kamis',
+    'Jumat',
+    'Sabtu',
+    'Minggu',
+  ];
+
+  const months = [
+    'Januari',
+    'Februari',
+    'Maret',
+    'April',
+    'Mei',
+    'Juni',
+    'Juli',
+    'Agustus',
+    'September',
+    'Oktober',
+    'November',
+    'Desember',
+  ];
+
+  return '${days[now.weekday - 1]}, ${now.day} ${months[now.month - 1]} ${now.year}';
+}
 
   @override
   Widget build(BuildContext context) {
@@ -348,9 +212,7 @@ Future<void> _autoSyncToSpreadsheet() async {
       backgroundColor: const Color(0xFFF5F5F5),
       body: SafeArea(
         child: isLoading
-            ? const Center(
-                child: CircularProgressIndicator(),
-              )
+            ? const Center(child: CircularProgressIndicator())
             : errorMessage != null
                 ? RefreshIndicator(
                     onRefresh: initReports,
@@ -371,7 +233,7 @@ Future<void> _autoSyncToSpreadsheet() async {
                           style: const TextStyle(
                             fontSize: 14,
                             color: Colors.black54,
-                          ),
+                          ), 
                         ),
                       ],
                     ),
@@ -383,55 +245,32 @@ Future<void> _autoSyncToSpreadsheet() async {
                       child: Column(
                         children: [
                           AppHeader(
-                            subtitle: todayText,
-                            child: Container(
-                              width: double.infinity,
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 12,
-                                vertical: 14,
-                              ),
-                              decoration: BoxDecoration(
-                                color: Colors.white,
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: Text(
-                                _selectedGerobakName,
-                                style: const TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.black87,
-                                ),
-                              ),
+                  subtitle: todayText,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 12,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            _selectedGerobakName,
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.black87,
                             ),
                           ),
-                          const SizedBox(height: 12),
-                          Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 12),
-                            child: _buildSectionCard(
-                              title: _isRider
-                                  ? "Laporan $_selectedGerobakName"
-                                  : "Laporan Keseluruhan",
-                              child: Row(
-                                children: [
-                                  Expanded(
-                                    child: _buildActionButton(
-                                      icon: Icons.table_chart_outlined,
-                                      label: "Lihat Spreadsheet",
-                                      onTap: _openSpreadsheet,
-                                    ),
-                                  ),
-                                  const SizedBox(width: 10),
-                                  Expanded(
-                                    child: _buildActionButton(
-                                      icon: Icons.download_outlined,
-                                      label: "Download Report",
-                                      onTap: _downloadReport,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
                           const SizedBox(height: 12),
                           Padding(
                             padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -442,102 +281,35 @@ Future<void> _autoSyncToSpreadsheet() async {
                                     icon: Icons.payments_outlined,
                                     title: "Total Revenue",
                                     value: formatRupiah(totalRevenue),
-                                    iconBg: Colors.black.withAlpha(12),
-                                    iconColor: Colors.black,
                                   ),
                                 ),
-                                const SizedBox(width: 10),
+                                const SizedBox(width: 12),
                                 Expanded(
                                   child: _buildSummaryCard(
                                     icon: Icons.receipt_long_outlined,
                                     title: "Total Orders",
                                     value: "$totalOrders",
-                                    iconBg: Colors.black.withAlpha(12),
-                                    iconColor: Colors.black,
                                   ),
                                 ),
                               ],
                             ),
                           ),
-                          const SizedBox(height: 10),
+                          const SizedBox(height: 12),
                           Padding(
                             padding: const EdgeInsets.symmetric(horizontal: 12),
                             child: _buildSummaryCard(
-                              icon: Icons.analytics_outlined,
+                              icon: Icons.bar_chart_outlined,
                               title: "Avg Order Value",
                               value: formatRupiah(averageOrderValue),
-                              iconBg: Colors.black.withAlpha(12),
-                              iconColor: Colors.black,
                               fullWidth: true,
                             ),
                           ),
                           const SizedBox(height: 14),
                           Padding(
                             padding: const EdgeInsets.symmetric(horizontal: 12),
-                            child: _buildSectionCard(
-                              title: "Daily Overview",
-                              child: totalRevenue == 0 && totalOrders == 0
-                                  ? const EmptyState(
-                                      icon: Icons.insights_outlined,
-                                      title: 'Belum ada data hari ini',
-                                      subtitle:
-                                          'Data revenue dan order harian akan muncul setelah ada transaksi.',
-                                    )
-                                  : Row(
-                                      children: [
-                                        Expanded(
-                                          child: _buildMiniStat(
-                                            label: "Revenue",
-                                            value: formatRupiah(totalRevenue),
-                                            color: Colors.black,
-                                          ),
-                                        ),
-                                        const SizedBox(width: 10),
-                                        Expanded(
-                                          child: _buildMiniStat(
-                                            label: "Orders",
-                                            value: "$totalOrders",
-                                            color: Colors.black,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                            ),
+                            child: _buildDailyOverviewChart(),
                           ),
-                          const SizedBox(height: 20),
-                          Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 12),
-                            child: _buildSectionCard(
-                              title: "Weekly Snapshot",
-                              child: weeklyRevenue == 0 && weeklyOrders == 0
-                                  ? const EmptyState(
-                                      icon: Icons.calendar_view_week_outlined,
-                                      title: 'Belum ada data minggu ini',
-                                      subtitle:
-                                          'Data mingguan akan tampil kalau sudah ada transaksi minggu ini.',
-                                    )
-                                  : Row(
-                                      children: [
-                                        Expanded(
-                                          child: _buildMiniStat(
-                                            label: "Revenue",
-                                            value: formatRupiah(weeklyRevenue),
-                                            color: Colors.black,
-                                          ),
-                                        ),
-                                        const SizedBox(width: 10),
-                                        Expanded(
-                                          child: _buildMiniStat(
-                                            label: "Orders",
-                                            value: "$weeklyOrders",
-                                            color: Colors.black,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                            ),
-                          ),
-                          const SizedBox(height: 20),
+                          const SizedBox(height: 24),
                         ],
                       ),
                     ),
@@ -546,88 +318,48 @@ Future<void> _autoSyncToSpreadsheet() async {
     );
   }
 
-  Widget _buildActionButton({
-    required IconData icon,
-    required String label,
-    required VoidCallback? onTap,
-  }) {
-    return SizedBox(
-      height: 52,
-      child: OutlinedButton.icon(
-        onPressed: onTap,
-        icon: Icon(
-          icon,
-          color: Colors.black87,
-          size: 20,
-        ),
-        label: Text(
-          label,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: const TextStyle(
-            color: Colors.black87,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        style: OutlinedButton.styleFrom(
-          side: BorderSide(
-            color: Colors.black.withAlpha(28),
-          ),
-          backgroundColor: Colors.white,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
-          ),
-        ),
-      ),
-    );
-  }
-
   Widget _buildSummaryCard({
     required IconData icon,
     required String title,
     required String value,
-    required Color iconBg,
-    required Color iconColor,
     bool fullWidth = false,
   }) {
     return Container(
       width: fullWidth ? double.infinity : null,
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 16),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(20),
         boxShadow: const [
           BoxShadow(
             color: Colors.black12,
             blurRadius: 8,
-            offset: Offset(0, 3),
+            offset: Offset(0, 2),
           ),
         ],
       ),
       child: Row(
         children: [
           Container(
-            width: 42,
-            height: 42,
+            width: 46,
+            height: 46,
             decoration: BoxDecoration(
-              color: iconBg,
+              color: Colors.grey.shade100,
               borderRadius: BorderRadius.circular(14),
             ),
             child: Icon(
               icon,
-              color: iconColor,
-              size: 22,
+              color: Colors.black87,
+              size: 24,
             ),
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: 14),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
                     fontSize: 12,
                     color: Colors.black54,
@@ -640,8 +372,8 @@ Future<void> _autoSyncToSpreadsheet() async {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
                     color: Colors.black87,
                   ),
                 ),
@@ -653,74 +385,195 @@ Future<void> _autoSyncToSpreadsheet() async {
     );
   }
 
-  Widget _buildSectionCard({
-    required String title,
-    required Widget child,
-  }) {
+  Widget _buildDailyOverviewChart() {
+    final bool hasData = totalRevenue > 0 || totalOrders > 0 || averageOrderValue > 0;
+
+    final spots = <FlSpot>[
+      FlSpot(0, totalRevenue.toDouble()),
+      FlSpot(1, averageOrderValue.toDouble()),
+      FlSpot(2, totalOrders.toDouble()),
+    ];
+
+    final maxY = _getMaxY();
+
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 20),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(20),
         boxShadow: const [
           BoxShadow(
             color: Colors.black12,
-            blurRadius: 6,
+            blurRadius: 8,
+            offset: Offset(0, 2),
           ),
         ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            title,
-            style: const TextStyle(
-              fontWeight: FontWeight.bold,
-              fontSize: 15,
+          const Text(
+            'Daily Overview',
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w700,
+              color: Colors.black87,
             ),
           ),
-          const SizedBox(height: 12),
-          child,
+          const SizedBox(height: 16),
+          SizedBox(
+            height: 220,
+            child: hasData
+                ? LineChart(
+                    LineChartData(
+                      minX: 0,
+                      maxX: 2,
+                      minY: 0,
+                      maxY: maxY,
+                      gridData: FlGridData(
+                        show: true,
+                        drawVerticalLine: true,
+                        horizontalInterval: maxY / 3,
+                        verticalInterval: 1,
+                        getDrawingHorizontalLine: (value) {
+                          return FlLine(
+                            color: Colors.grey.shade300,
+                            strokeWidth: 1,
+                            dashArray: [4, 4],
+                          );
+                        },
+                        getDrawingVerticalLine: (value) {
+                          return FlLine(
+                            color: Colors.grey.shade300,
+                            strokeWidth: 1,
+                            dashArray: [4, 4],
+                          );
+                        },
+                      ),
+                      titlesData: FlTitlesData(
+                        topTitles: const AxisTitles(
+                          sideTitles: SideTitles(showTitles: false),
+                        ),
+                        rightTitles: const AxisTitles(
+                          sideTitles: SideTitles(showTitles: false),
+                        ),
+                        bottomTitles: AxisTitles(
+                          sideTitles: SideTitles(
+                            showTitles: true,
+                            interval: 1, // penting biar ga duplicate
+                            reservedSize: 32,
+                            getTitlesWidget: (value, meta) {
+                              String text = '';
+
+                              switch (value.toInt()) {
+                                case 0:
+                                  text = 'Rev';
+                                  break;
+                                case 1:
+                                  text = 'Avg';
+                                  break;
+                                case 2:
+                                  text = 'Ord';
+                                  break;
+                              }
+
+                              return Padding(
+                                padding: const EdgeInsets.only(top: 8),
+                                child: Text(
+                                  text,
+                                  style: const TextStyle(
+                                    fontSize: 11,
+                                    color: Colors.black54,
+                                  ),
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                        leftTitles: AxisTitles(
+                          sideTitles: SideTitles(
+                            showTitles: true,
+                            reservedSize: 42,
+                            interval: maxY / 3,
+                            getTitlesWidget: (value, meta) {
+                              return Text(
+                                _formatAxisLabel(value),
+                                style: const TextStyle(
+                                  fontSize: 10,
+                                  color: Colors.black54,
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                      ),
+                      borderData: FlBorderData(
+                        show: true,
+                        border: Border(
+                          left: BorderSide(color: Colors.grey.shade300),
+                          bottom: BorderSide(color: Colors.grey.shade300),
+                          right: BorderSide.none,
+                          top: BorderSide.none,
+                        ),
+                      ),
+                      lineBarsData: [
+                        LineChartBarData(
+                          spots: spots,
+                          isCurved: true,
+                          color: const Color(0xFFFF8C1A),
+                          barWidth: 3,
+                          isStrokeCapRound: true,
+                          dotData: FlDotData(
+                            show: true,
+                            getDotPainter: (spot, percent, barData, index) {
+                              return FlDotCirclePainter(
+                                radius: 4.5,
+                                color: const Color(0xFFFF8C1A),
+                                strokeWidth: 0,
+                              );
+                            },
+                          ),
+                          belowBarData: BarAreaData(show: false),
+                        ),
+                      ],
+                    ),
+                  )
+                : const Center(
+                    child: Text(
+                      'Belum ada data hari ini',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.black54,
+                      ),
+                    ),
+                  ),
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildMiniStat({
-    required String label,
-    required String value,
-    required Color color,
-  }) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-      decoration: BoxDecoration(
-        color: color.withAlpha(14),
-        borderRadius: BorderRadius.circular(14),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            label,
-            style: const TextStyle(
-              fontSize: 12,
-              color: Colors.black54,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            value,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontSize: 15,
-              fontWeight: FontWeight.bold,
-              color: color,
-            ),
-          ),
-        ],
-      ),
-    );
+  double _getMaxY() {
+    final values = [
+      totalRevenue.toDouble(),
+      averageOrderValue.toDouble(),
+      totalOrders.toDouble(),
+    ];
+
+    final maxValue = values.reduce((a, b) => a > b ? a : b);
+
+    if (maxValue <= 0) return 10;
+    return (maxValue * 1.3).ceilToDouble();
+  }
+
+  String _formatAxisLabel(double value) {
+    if (value >= 1000000) {
+      return '${(value / 1000000).toStringAsFixed(1)}jt';
+    }
+    if (value >= 1000) {
+      return '${(value / 1000).toStringAsFixed(0)}k';
+    }
+    return value.toInt().toString();
   }
 }
