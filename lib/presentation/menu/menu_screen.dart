@@ -35,7 +35,7 @@ class _MenuScreenState extends State<MenuScreen> {
 
       if (!mounted) return;
       setState(() {
-        menuItems = data.take(12).toList();
+        menuItems = data.toList();
         isLoading = false;
       });
     } catch (e) {
@@ -56,18 +56,18 @@ class _MenuScreenState extends State<MenuScreen> {
     final name = _normalizeName(menuName);
 
     const imageMap = <String, String>{
-      'Americano'     : 'assets/images/menu_07.png',
-      'Pandawa'       : 'assets/images/menu_06.png',
-      'Butterscotch'  : 'assets/images/menu_06.png',
-      'Caramel'       : 'assets/images/menu_06.png',
-      'Hazelnut'      : 'assets/images/menu_06.png',
-      'Salted Caramel': 'assets/images/menu_06.png',
-      'Mico'          : 'assets/images/menu_06.png',
-      'Lowco'         : 'assets/images/menu_03.png',
-      'Matcha'        : 'assets/images/menu_05.png',
-      'Taro'          : 'assets/images/menu_01.png',
-      'Red Velvet'    : 'assets/images/menu_02.png',
-      'Choco'         : 'assets/images/menu_04.png',
+      'americano': 'assets/images/menu_07.png',
+      'pandawa': 'assets/images/menu_06.png',
+      'butterscotch': 'assets/images/menu_06.png',
+      'caramel': 'assets/images/menu_06.png',
+      'hazelnut': 'assets/images/menu_06.png',
+      'salted caramel': 'assets/images/menu_06.png',
+      'mico': 'assets/images/menu_06.png',
+      'lowco': 'assets/images/menu_03.png',
+      'matcha': 'assets/images/menu_05.png',
+      'taro': 'assets/images/menu_01.png',
+      'red velvet': 'assets/images/menu_02.png',
+      'choco': 'assets/images/menu_04.png',
     };
 
     return imageMap[name];
@@ -103,24 +103,31 @@ class _MenuScreenState extends State<MenuScreen> {
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(borderRadius),
-      child: Image.asset(
-        assetPath,
+      child: Container(
         width: width,
         height: height,
-        fit: BoxFit.cover,
-        errorBuilder: (_, __, ___) {
-          return Container(
-            width: width,
-            height: height,
-            color: Colors.orange.withAlpha(18),
-            alignment: Alignment.center,
-            child: const Icon(
-              Icons.local_cafe,
-              size: 34,
-              color: Colors.orange,
-            ),
-          );
-        },
+        color: Colors.transparent,
+        alignment: Alignment.center,
+        child: Image.asset(
+          assetPath,
+          width: width,
+          height: height,
+          fit: BoxFit.contain,
+          alignment: Alignment.center,
+          errorBuilder: (_, __, ___) {
+            return Container(
+              width: width,
+              height: height,
+              color: Colors.orange.withAlpha(18),
+              alignment: Alignment.center,
+              child: const Icon(
+                Icons.local_cafe,
+                size: 34,
+                color: Colors.orange,
+              ),
+            );
+          },
+        ),
       ),
     );
   }
@@ -256,10 +263,10 @@ class _MenuScreenState extends State<MenuScreen> {
         padding: const EdgeInsets.all(12),
         itemCount: items.length,
         gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 2,
+          crossAxisCount: 4,
           mainAxisSpacing: 12,
           crossAxisSpacing: 12,
-          childAspectRatio: 0.78,
+          childAspectRatio: 0.72,
         ),
         itemBuilder: (_, i) {
           final item = items[i];
@@ -275,14 +282,19 @@ class _MenuScreenState extends State<MenuScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Expanded(
+                SizedBox(
+                  height: 120,
                   child: Stack(
                     children: [
                       Positioned.fill(
-                        child: _buildMenuImage(
-                          menuName: item.name,
-                          index: i,
-                          borderRadius: 18,
+                        child: Center(
+                          child: _buildMenuImage(
+                            menuName: item.name,
+                            index: i,
+                            width: 90,
+                            height: 90,
+                            borderRadius: 18,
+                          ),
                         ),
                       ),
                       Positioned(
