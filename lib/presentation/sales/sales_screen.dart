@@ -12,6 +12,7 @@ import '../widgets/empty_state.dart';
 import '../widgets/header.dart';
 import '../../utils/dialog_helper.dart';
 import '../../core/supabase/selected_gerobak_store.dart';
+import '../../data/services/menu_service.dart';
 
 class SalesScreen extends StatefulWidget {
   const SalesScreen({super.key});
@@ -22,6 +23,7 @@ class SalesScreen extends StatefulWidget {
 
 class _SalesScreenState extends State<SalesScreen> {
   final StockService _stockService = StockService();
+  final MenuService _menuService = MenuService();
   final TransaksiService _transaksiService = TransaksiService();
   final ReportService _reportService = ReportService();
 
@@ -52,10 +54,33 @@ class _SalesScreenState extends State<SalesScreen> {
 
   String get todayText {
     final now = DateTime.now();
-    final day = now.day.toString().padLeft(2, '0');
-    final month = now.month.toString().padLeft(2, '0');
-    final year = now.year;
-    return '$day/$month/$year';
+
+    const days = [
+      'Senin',
+      'Selasa',
+      'Rabu',
+      'Kamis',
+      'Jumat',
+      'Sabtu',
+      'Minggu',
+    ];
+
+    const months = [
+      'Januari',
+      'Februari',
+      'Maret',
+      'April',
+      'Mei',
+      'Juni',
+      'Juli',
+      'Agustus',
+      'September',
+      'Oktober',
+      'November',
+      'Desember',
+    ];
+
+    return '${days[now.weekday - 1]}, ${now.day} ${months[now.month - 1]} ${now.year}';
   }
 
   void _handleSelectedGerobakChanged() {
@@ -120,8 +145,8 @@ class _SalesScreenState extends State<SalesScreen> {
       final storeId = SelectedGerobakStore.selectedGerobakId;
 
       final selected = gerobaks.any(
-        (item) => item['id']?.toString() == storeId,
-      )
+              (item) => item['id']?.toString() == storeId,
+            )
           ? gerobaks.firstWhere(
               (item) => item['id']?.toString() == storeId,
             )
@@ -151,6 +176,27 @@ class _SalesScreenState extends State<SalesScreen> {
     }
   }
 
+  List<Map<String, dynamic>> _fallbackMasterMenus() {
+    return [
+      {'id': 'fallback_americano', 'name': 'Americano', 'price': 13000, 'category': 'coffee', 'emoji': '☕'},
+      {'id': 'fallback_pandawa', 'name': 'Pandawa', 'price': 13000, 'category': 'coffee', 'emoji': '☕'},
+      {'id': 'fallback_butterscotch', 'name': 'Butterscotch', 'price': 13000, 'category': 'coffee', 'emoji': '☕'},
+      {'id': 'fallback_caramel', 'name': 'Caramel', 'price': 13000, 'category': 'coffee', 'emoji': '☕'},
+      {'id': 'fallback_hazelnut', 'name': 'Hazelnut', 'price': 13000, 'category': 'coffee', 'emoji': '☕'},
+      {'id': 'fallback_salted_caramel', 'name': 'Salted Caramel', 'price': 13000, 'category': 'coffee', 'emoji': '☕'},
+      {'id': 'fallback_mico', 'name': 'Mico', 'price': 13000, 'category': 'coffee', 'emoji': '☕'},
+      {'id': 'fallback_lowco', 'name': 'Lowco', 'price': 13000, 'category': 'coffee', 'emoji': '☕'},
+      {'id': 'fallback_matcha', 'name': 'Matcha', 'price': 13000, 'category': 'non-coffee', 'emoji': '🍵'},
+      {'id': 'fallback_taro', 'name': 'Taro', 'price': 13000, 'category': 'non-coffee', 'emoji': '🧋'},
+      {'id': 'fallback_red_velvet', 'name': 'Red Velvet', 'price': 13000, 'category': 'non-coffee', 'emoji': '🥤'},
+      {'id': 'fallback_choco', 'name': 'Choco', 'price': 12000, 'category': 'non-coffee', 'emoji': '🍫'},
+    ];
+  }
+
+  String _normalizeName(String value) {
+    return value.toLowerCase().trim().replaceAll(RegExp(r'[^a-z0-9]+'), ' ');
+  }
+
   Future<void> loadMenusByGerobak() async {
     if (selectedGerobakId == null) {
       if (!mounted) return;
@@ -169,32 +215,138 @@ class _SalesScreenState extends State<SalesScreen> {
         setState(() => isLoading = true);
       }
 
-      final data = await _stockService.getStocksByGerobak(selectedGerobakId!);
+      final stockData = await _stockService.getStocksByGerobak(selectedGerobakId!);
+
+      List<dynamic> serviceMenus = [];
+      try {
+        serviceMenus = await _menuService.getMenus();
+      } catch (_) {
+        serviceMenus = [];
+      }
+
+      final fallbackMenus = _fallbackMasterMenus();
+
+      final Map<String, Map<String, dynamic>> mergedMasterByName = {};
+
+      for (final menu in fallbackMenus) {
+        final normalized = _normalizeName(menu['name'].toString());
+        mergedMasterByName[normalized] = {
+          'id': menu['id'],
+          'name': menu['name'],
+          'price': menu['price'],
+          'category': menu['category'],
+          'emoji': menu['emoji'],
+          'created_at': null,
+        };
+      }
+
+      for (final menu in serviceMenus) {
+        final name = (menu.name ?? '').toString();
+        if (name.isEmpty) continue;
+
+        final normalized = _normalizeName(name);
+        mergedMasterByName[normalized] = {
+          'id': menu.id,
+          'name': menu.name,
+          'price': menu.price ?? 0,
+          'category': menu.category,
+          'emoji': menu.emoji,
+          'created_at': menu.createdAt?.toIso8601String(),
+        };
+      }
+
+      for (final stock in stockData) {
+        final stockMenu = stock['menu'] as Map<String, dynamic>? ?? {};
+        final stockMenuName = stockMenu['name']?.toString() ?? '';
+        if (stockMenuName.isEmpty) continue;
+
+        final normalized = _normalizeName(stockMenuName);
+
+        mergedMasterByName.putIfAbsent(normalized, () {
+          return {
+            'id': stockMenu['id'],
+            'name': stockMenu['name'],
+            'price': stockMenu['price'] ?? 0,
+            'category': stockMenu['category'],
+            'emoji': stockMenu['emoji'],
+            'created_at': stockMenu['created_at'],
+          };
+        });
+      }
+
+      final Map<String, Map<String, dynamic>> stockByName = {};
+      for (final stock in stockData) {
+        final stockMenu = stock['menu'] as Map<String, dynamic>? ?? {};
+        final stockMenuName = stockMenu['name']?.toString() ?? '';
+        if (stockMenuName.isEmpty) continue;
+
+        stockByName[_normalizeName(stockMenuName)] = stock;
+      }
+
+      final List<Map<String, dynamic>> finalItems = mergedMasterByName.entries.map((entry) {
+        final master = entry.value;
+        final stockItem = stockByName[entry.key];
+        final stockMenu = stockItem?['menu'] as Map<String, dynamic>? ?? {};
+
+        final dynamic finalMenuId = stockMenu['id'] ?? master['id'];
+        final int finalPrice = ((stockMenu['price'] ?? master['price'] ?? 0) as num).toInt();
+
+        return {
+          'id': stockItem?['id'],
+          'gerobak_id': selectedGerobakId,
+          'menu_id': finalMenuId?.toString(),
+          'stok_awal': stockItem?['stok_awal'] ?? 0,
+          'stok_saat_ini': stockItem?['stok_saat_ini'] ?? 0,
+          'created_at': stockItem?['created_at'],
+          'stock': ((stockItem?['stok_saat_ini'] ?? 0) as num).toInt(),
+          'menu': {
+            'id': finalMenuId,
+            'name': stockMenu['name'] ?? master['name'],
+            'price': finalPrice,
+            'category': stockMenu['category'] ?? master['category'],
+            'emoji': stockMenu['emoji'] ?? master['emoji'],
+            'created_at': stockMenu['created_at'] ?? master['created_at'],
+          },
+        };
+      }).toList();
+
+      finalItems.sort((a, b) {
+        final nameA = ((a['menu'] as Map<String, dynamic>?)?['name'] ?? '').toString();
+        final nameB = ((b['menu'] as Map<String, dynamic>?)?['name'] ?? '').toString();
+        return nameA.compareTo(nameB);
+      });
 
       if (!mounted) return;
       setState(() {
-        items = data.take(12).toList();
+        items = finalItems;
         isLoading = false;
 
         if (selectedItem != null) {
-          final selectedMenuId = selectedItem!['menu_id']?.toString();
-          final stillExists = items.any(
-            (item) => item['menu_id']?.toString() == selectedMenuId,
-          );
+          final selectedMenuName = ((selectedItem!['menu'] as Map<String, dynamic>?)?['name'] ?? '').toString();
+          final selectedNormalized = _normalizeName(selectedMenuName);
+
+          final stillExists = items.any((item) {
+            final itemName = (((item['menu'] as Map<String, dynamic>?)?['name']) ?? '').toString();
+            return _normalizeName(itemName) == selectedNormalized;
+          });
 
           if (!stillExists) {
             selectedItem = null;
             qty = 1;
             payment = null;
           } else {
-            final freshSelected = items.firstWhere(
-              (item) => item['menu_id']?.toString() == selectedMenuId,
-            );
+            final freshSelected = items.firstWhere((item) {
+              final itemName = (((item['menu'] as Map<String, dynamic>?)?['name']) ?? '').toString();
+              return _normalizeName(itemName) == selectedNormalized;
+            });
+
             selectedItem = freshSelected;
 
             final latestStock = ((freshSelected['stock'] ?? 0) as num).toInt();
-            if (qty > latestStock) {
-              qty = latestStock > 0 ? latestStock : 1;
+            if (latestStock <= 0) {
+              qty = 1;
+            } else if (qty > latestStock) {
+              qty = latestStock;
             }
           }
         }
@@ -380,10 +532,6 @@ class _SalesScreenState extends State<SalesScreen> {
 
   int get _totalPrice {
     return _selectedPrice * qty;
-  }
-
-  String _normalizeName(String value) {
-    return value.toLowerCase().trim().replaceAll(RegExp(r'[^a-z0-9]+'), ' ');
   }
 
   String? _getMenuImageAssetByName(String menuName) {
@@ -590,33 +738,33 @@ class _SalesScreenState extends State<SalesScreen> {
                     child: SingleChildScrollView(
                       child: Column(
                         children: [
-                          AppHeader(
-                            subtitle: "Quick and easy sales entry",
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 12,
-                                vertical: 12,
-                              ),
-                              decoration: BoxDecoration(
-                                color: Colors.white,
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: Row(
-                                children: [
-                                  Expanded(
-                                    child: Text(
-                                      _selectedGerobakName,
-                                      style: const TextStyle(
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.bold,
-                                        color: Colors.black87,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
+                           AppHeader(
+                  subtitle: todayText,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 12,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            _selectedGerobakName,
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.black87,
                             ),
                           ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
                           const SizedBox(height: 10),
                           Padding(
                             padding: const EdgeInsets.all(12),
@@ -629,8 +777,7 @@ class _SalesScreenState extends State<SalesScreen> {
                                   )
                                 : GridView.builder(
                                     shrinkWrap: true,
-                                    physics:
-                                        const NeverScrollableScrollPhysics(),
+                                    physics: const NeverScrollableScrollPhysics(),
                                     itemCount: items.length,
                                     gridDelegate:
                                         const SliverGridDelegateWithFixedCrossAxisCount(

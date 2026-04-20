@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../data/services/stock_service.dart';
+import '../../data/services/menu_service.dart';
 import '../widgets/header.dart';
 import '../../utils/dialog_helper.dart';
 import '../../core/supabase/selected_gerobak_store.dart';
@@ -15,6 +16,7 @@ class StockScreen extends StatefulWidget {
 class _StockScreenState extends State<StockScreen> {
   final SupabaseClient supabase = Supabase.instance.client;
   final StockService _stockService = StockService();
+  final MenuService _menuService = MenuService();
 
   List<Map<String, dynamic>> data = [];
   List<Map<String, dynamic>> gerobak = [];
@@ -39,6 +41,58 @@ class _StockScreenState extends State<StockScreen> {
 
     if (found.isEmpty) return '-';
     return found.first['nama_gerobak']?.toString() ?? '-';
+  }
+
+  String get todayText {
+    final now = DateTime.now();
+
+    const days = [
+      'Senin',
+      'Selasa',
+      'Rabu',
+      'Kamis',
+      'Jumat',
+      'Sabtu',
+      'Minggu',
+    ];
+
+    const months = [
+      'Januari',
+      'Februari',
+      'Maret',
+      'April',
+      'Mei',
+      'Juni',
+      'Juli',
+      'Agustus',
+      'September',
+      'Oktober',
+      'November',
+      'Desember',
+    ];
+
+    return '${days[now.weekday - 1]}, ${now.day} ${months[now.month - 1]} ${now.year}';
+  }
+
+  String _normalizeName(String value) {
+    return value.toLowerCase().trim().replaceAll(RegExp(r'[^a-z0-9]+'), ' ');
+  }
+
+  List<Map<String, dynamic>> _fallbackMasterMenus() {
+    return [
+      {'id': 'fallback_americano', 'name': 'Americano', 'price': 13000, 'category': 'Coffee', 'emoji': '☕'},
+      {'id': 'fallback_pandawa', 'name': 'Pandawa', 'price': 13000, 'category': 'Coffee', 'emoji': '☕'},
+      {'id': 'fallback_butterscotch', 'name': 'Butterscotch', 'price': 13000, 'category': 'Coffee', 'emoji': '☕'},
+      {'id': 'fallback_caramel', 'name': 'Caramel', 'price': 13000, 'category': 'Coffee', 'emoji': '☕'},
+      {'id': 'fallback_hazelnut', 'name': 'Hazelnut', 'price': 13000, 'category': 'Coffee', 'emoji': '☕'},
+      {'id': 'fallback_salted_caramel', 'name': 'Salted Caramel', 'price': 13000, 'category': 'Coffee', 'emoji': '☕'},
+      {'id': 'fallback_mico', 'name': 'Mico', 'price': 13000, 'category': 'Coffee', 'emoji': '☕'},
+      {'id': 'fallback_lowco', 'name': 'Lowco', 'price': 13000, 'category': 'Coffee', 'emoji': '☕'},
+      {'id': 'fallback_matcha', 'name': 'Matcha', 'price': 13000, 'category': 'Non Coffee', 'emoji': '🍵'},
+      {'id': 'fallback_taro', 'name': 'Taro', 'price': 13000, 'category': 'Non Coffee', 'emoji': '🧋'},
+      {'id': 'fallback_red_velvet', 'name': 'Red Velvet', 'price': 13000, 'category': 'Non Coffee', 'emoji': '🥤'},
+      {'id': 'fallback_choco', 'name': 'Choco', 'price': 12000, 'category': 'Non Coffee', 'emoji': '🍫'},
+    ];
   }
 
   void _handleSelectedGerobakChanged() {
@@ -158,11 +212,114 @@ class _StockScreenState extends State<StockScreen> {
         setState(() => isLoading = true);
       }
 
-      final result = await _stockService.getStocksByGerobak(selectedGerobak!);
+      final stockData = await _stockService.getStocksByGerobak(selectedGerobak!);
+
+      List<dynamic> serviceMenus = [];
+      try {
+        serviceMenus = await _menuService.getMenus();
+      } catch (_) {
+        serviceMenus = [];
+      }
+
+      final fallbackMenus = _fallbackMasterMenus();
+
+      final Map<String, Map<String, dynamic>> mergedMasterByName = {};
+
+      for (final menu in fallbackMenus) {
+        final normalized = _normalizeName(menu['name'].toString());
+        mergedMasterByName[normalized] = {
+          'id': menu['id'],
+          'name': menu['name'],
+          'price': menu['price'],
+          'category': menu['category'],
+          'emoji': menu['emoji'],
+          'created_at': null,
+        };
+      }
+
+      for (final menu in serviceMenus) {
+        final name = (menu.name ?? '').toString();
+        if (name.isEmpty) continue;
+
+        final normalized = _normalizeName(name);
+        mergedMasterByName[normalized] = {
+          'id': menu.id,
+          'name': menu.name,
+          'price': menu.price ?? 0,
+          'category': menu.category ?? 'Coffee',
+          'emoji': menu.emoji,
+          'created_at': menu.createdAt?.toIso8601String(),
+        };
+      }
+
+      for (final stock in stockData) {
+        final stockMenu = stock['menu'] as Map<String, dynamic>? ?? {};
+        final stockMenuName = stockMenu['name']?.toString() ?? '';
+        if (stockMenuName.isEmpty) continue;
+
+        final normalized = _normalizeName(stockMenuName);
+
+        mergedMasterByName.putIfAbsent(normalized, () {
+          return {
+            'id': stockMenu['id'],
+            'name': stockMenu['name'],
+            'price': stockMenu['price'] ?? 0,
+            'category': stockMenu['category'] ?? 'Coffee',
+            'emoji': stockMenu['emoji'],
+            'created_at': stockMenu['created_at'],
+          };
+        });
+      }
+
+      final Map<String, Map<String, dynamic>> stockByName = {};
+      for (final stock in stockData) {
+        final stockMenu = stock['menu'] as Map<String, dynamic>? ?? {};
+        final stockMenuName = stockMenu['name']?.toString() ?? '';
+        if (stockMenuName.isEmpty) continue;
+
+        stockByName[_normalizeName(stockMenuName)] = stock;
+      }
+
+      final List<Map<String, dynamic>> finalItems =
+          mergedMasterByName.entries.map((entry) {
+        final master = entry.value;
+        final stockItem = stockByName[entry.key];
+        final stockMenu = stockItem?['menu'] as Map<String, dynamic>? ?? {};
+
+        final dynamic finalMenuId = stockMenu['id'] ?? master['id'];
+        final int finalPrice =
+            ((stockMenu['price'] ?? master['price'] ?? 0) as num).toInt();
+
+        return {
+          'id': stockItem?['id'],
+          'gerobak_id': selectedGerobak,
+          'menu_id': finalMenuId?.toString(),
+          'stok_awal': stockItem?['stok_awal'] ?? 0,
+          'stok_saat_ini': stockItem?['stok_saat_ini'] ?? 0,
+          'created_at': stockItem?['created_at'],
+          'stock': ((stockItem?['stok_saat_ini'] ?? 0) as num).toInt(),
+          'menu': {
+            'id': finalMenuId,
+            'name': stockMenu['name'] ?? master['name'],
+            'price': finalPrice,
+            'category': stockMenu['category'] ?? master['category'],
+            'emoji': stockMenu['emoji'] ?? master['emoji'],
+            'created_at': stockMenu['created_at'] ?? master['created_at'],
+          },
+        };
+      }).toList();
+
+      finalItems.sort((a, b) {
+        final nameA =
+            ((a['menu'] as Map<String, dynamic>?)?['name'] ?? '').toString();
+        final nameB =
+            ((b['menu'] as Map<String, dynamic>?)?['name'] ?? '').toString();
+        return nameA.compareTo(nameB);
+      });
 
       if (!mounted) return;
       setState(() {
-        data = result;
+        data = finalItems;
         isLoading = false;
       });
     } catch (e) {
@@ -185,7 +342,13 @@ class _StockScreenState extends State<StockScreen> {
 
     try {
       final menuId = menu['id']?.toString();
-      if (menuId == null || menuId.isEmpty) return;
+      if (menuId == null || menuId.isEmpty || menuId.startsWith('fallback_')) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Menu ini belum tersimpan di database")),
+        );
+        return;
+      }
 
       await supabase.from('stok_gerobak').delete().eq('menu_id', menuId);
       await supabase.from('detail_transaksi').delete().eq('menu_id', menuId);
@@ -452,6 +615,14 @@ class _StockScreenState extends State<StockScreen> {
   }
 
   void editModal(Map<String, dynamic> menu) {
+    final menuId = menu['id']?.toString() ?? '';
+    if (menuId.startsWith('fallback_')) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Menu ini belum tersimpan di database')),
+      );
+      return;
+    }
+
     final name = TextEditingController(text: menu['name']?.toString() ?? '');
     final price = TextEditingController(
       text: (menu['price'] ?? 0).toString(),
@@ -630,8 +801,8 @@ class _StockScreenState extends State<StockScreen> {
           ? const Center(child: CircularProgressIndicator())
           : Column(
               children: [
-                AppHeader(
-                  subtitle: "Stock",
+                 AppHeader(
+                  subtitle: todayText,
                   child: Container(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 12,
