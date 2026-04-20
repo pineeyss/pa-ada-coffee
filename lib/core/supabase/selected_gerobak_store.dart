@@ -24,8 +24,14 @@ class SelectedGerobakStore {
   static final ValueNotifier<GerobakItem?> selectedGerobak =
       ValueNotifier<GerobakItem?>(null);
 
+  static final ValueNotifier<int> salesRefreshToken = ValueNotifier<int>(0);
+
   static void setGerobak(GerobakItem gerobak) {
     selectedGerobak.value = gerobak;
+  }
+
+  static void notifySalesChanged() {
+    salesRefreshToken.value = salesRefreshToken.value + 1;
   }
 
   static String? get selectedGerobakId => selectedGerobak.value?.id;

@@ -1,147 +1,100 @@
-import 'package:fl_chart/fl_chart.dart';
+import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class ReportService {
   final SupabaseClient supabase = Supabase.instance.client;
 
-  DateTime _startOfDay(DateTime date) {
-    return DateTime(date.year, date.month, date.day);
-  }
-
-  DateTime _endOfDay(DateTime date) {
-    return DateTime(date.year, date.month, date.day, 23, 59, 59);
-  }
-
-  ({DateTime start, DateTime end}) _getRange({required int days}) {
-    final now = DateTime.now();
-    final end = _endOfDay(now);
-    final start = _startOfDay(now.subtract(Duration(days: days - 1)));
-    return (start: start, end: end);
-  }
-
-  String _normalizeName(String value) {
-    return value.trim().toLowerCase().replaceAll(RegExp(r'\s+'), '_');
-  }
-
-  // =======================
-  // GANTI LINK DI BAWAH INI
-  // =======================
-
-  static const String ownerSpreadsheetAll =
-      'ISI_LINK_SPREADSHEET_OWNER_KESELURUHAN';
-
-  static const String ownerDownloadAll =
-      'ISI_LINK_DOWNLOAD_OWNER_KESELURUHAN';
-
-  static const Map<String, String> spreadsheetByGerobakName = {
-    'gerobak_1': 'ISI_LINK_SPREADSHEET_GEROBAK_1',
-    'gerobak_2': 'ISI_LINK_SPREADSHEET_GEROBAK_2',
-    'gerobak_3': 'ISI_LINK_SPREADSHEET_GEROBAK_3',
-  };
-
-  static const Map<String, String> downloadByGerobakName = {
-    'gerobak_1': 'ISI_LINK_DOWNLOAD_GEROBAK_1',
-    'gerobak_2': 'ISI_LINK_DOWNLOAD_GEROBAK_2',
-    'gerobak_3': 'ISI_LINK_DOWNLOAD_GEROBAK_3',
-  };
-
-  String? getSpreadsheetUrl({
-    required String role,
+  String? _resolveSpreadsheetKey({
+    String? gerobakId,
     String? gerobakName,
   }) {
-    if (role == 'owner') {
-      return ownerSpreadsheetAll;
-    }
+    final normalized = (gerobakId ?? gerobakName ?? '')
+        .toLowerCase()
+        .replaceAll(' ', '_');
 
-    final normalized = _normalizeName(gerobakName ?? '');
-    return spreadsheetByGerobakName[normalized];
+    if (normalized.contains('01')) return 'gerobak_01';
+    if (normalized.contains('02')) return 'gerobak_02';
+    if (normalized.contains('03')) return 'gerobak_03';
+
+    return null;
   }
 
-  String? getDownloadUrl({
-    required String role,
-    String? gerobakName,
-  }) {
-    if (role == 'owner') {
-      return ownerDownloadAll;
-    }
-
-    final normalized = _normalizeName(gerobakName ?? '');
-    return downloadByGerobakName[normalized];
-  }
+  // =============================
+  // 🔥 DAILY FIX (ANTI 0)
+  // =============================
 
   Future<int> getTotalRevenue({
     String? gerobakId,
-    int days = 1,
   }) async {
-    final range = _getRange(days: days);
+    final response = await supabase
+        .from('transaksi')
+        .select('total_harga, tanggal')
+        .eq('gerobak_id', gerobakId!);
 
-    final List<dynamic> response;
-    if (gerobakId != null && gerobakId != 'all') {
-      response = await supabase
-          .from('transaksi')
-          .select('total_harga')
-          .eq('gerobak_id', gerobakId)
-          .gte('tanggal', range.start.toIso8601String())
-          .lte('tanggal', range.end.toIso8601String());
-    } else {
-      response = await supabase
-          .from('transaksi')
-          .select('total_harga')
-          .gte('tanggal', range.start.toIso8601String())
-          .lte('tanggal', range.end.toIso8601String());
-    }
+    final now = DateTime.now();
+    final start = DateTime(now.year, now.month, now.day);
+    final end = start.add(const Duration(days: 1));
 
     int total = 0;
+
     for (final item in response) {
-      total += ((item['total_harga'] ?? 0) as num).toInt();
+      final date = DateTime.tryParse(item['tanggal'] ?? '');
+      if (date == null) continue;
+
+      if (date.isAfter(start.subtract(const Duration(seconds: 1))) &&
+          date.isBefore(end)) {
+        total += ((item['total_harga'] ?? 0) as num).toInt();
+      }
     }
+
     return total;
   }
 
   Future<int> getTotalOrders({
     String? gerobakId,
-    int days = 1,
   }) async {
-    final range = _getRange(days: days);
+    final response = await supabase
+        .from('transaksi')
+        .select('id, tanggal')
+        .eq('gerobak_id', gerobakId!);
 
-    final List<dynamic> response;
-    if (gerobakId != null && gerobakId != 'all') {
-      response = await supabase
-          .from('transaksi')
-          .select('id')
-          .eq('gerobak_id', gerobakId)
-          .gte('tanggal', range.start.toIso8601String())
-          .lte('tanggal', range.end.toIso8601String());
-    } else {
-      response = await supabase
-          .from('transaksi')
-          .select('id')
-          .gte('tanggal', range.start.toIso8601String())
-          .lte('tanggal', range.end.toIso8601String());
+    final now = DateTime.now();
+    final start = DateTime(now.year, now.month, now.day);
+    final end = start.add(const Duration(days: 1));
+
+    int total = 0;
+
+    for (final item in response) {
+      final date = DateTime.tryParse(item['tanggal'] ?? '');
+      if (date == null) continue;
+
+      if (date.isAfter(start.subtract(const Duration(seconds: 1))) &&
+          date.isBefore(end)) {
+        total++;
+      }
     }
 
-    return response.length;
+    return total;
   }
+
+  // =============================
+  // WEEKLY
+  // =============================
 
   Future<int> getWeeklyRevenue({
     required String? gerobakId,
   }) async {
-    if (gerobakId == null) return 0;
-
     final now = DateTime.now();
     final sevenDaysAgo = now.subtract(const Duration(days: 7));
 
     final response = await supabase
         .from('transaksi')
         .select('total_harga, tanggal')
-        .eq('gerobak_id', gerobakId)
+        .eq('gerobak_id', gerobakId!)
         .gte('tanggal', sevenDaysAgo.toIso8601String());
 
-    final data = List<Map<String, dynamic>>.from(response);
-
     int total = 0;
-
-    for (var item in data) {
+    for (var item in response) {
       total += (item['total_harga'] as num?)?.toInt() ?? 0;
     }
 
@@ -151,263 +104,121 @@ class ReportService {
   Future<int> getWeeklyOrders({
     required String? gerobakId,
   }) async {
-    if (gerobakId == null) return 0;
-
     final now = DateTime.now();
     final sevenDaysAgo = now.subtract(const Duration(days: 7));
 
     final response = await supabase
         .from('transaksi')
         .select('id, tanggal')
-        .eq('gerobak_id', gerobakId)
+        .eq('gerobak_id', gerobakId!)
         .gte('tanggal', sevenDaysAgo.toIso8601String());
 
-    final data = List<Map<String, dynamic>>.from(response);
-
-    return data.length;
+    return response.length;
   }
 
-  Future<List<Map<String, dynamic>>> getTopSellingItems({
-    String? gerobakId,
-    int days = 1,
+  // =============================
+  // HISTORICAL
+  // =============================
+
+  Future<List<Map<String, dynamic>>> getHistoricalDailySummaries({
+    required String gerobakId,
   }) async {
-    final range = _getRange(days: days);
+    final transaksi = await supabase
+        .from('transaksi')
+        .select('tanggal, total_harga')
+        .eq('gerobak_id', gerobakId);
 
-    final List<dynamic> transaksi;
-    if (gerobakId != null && gerobakId != 'all') {
-      transaksi = await supabase
-          .from('transaksi')
-          .select('id')
-          .eq('gerobak_id', gerobakId)
-          .gte('tanggal', range.start.toIso8601String())
-          .lte('tanggal', range.end.toIso8601String());
-    } else {
-      transaksi = await supabase
-          .from('transaksi')
-          .select('id')
-          .gte('tanggal', range.start.toIso8601String())
-          .lte('tanggal', range.end.toIso8601String());
-    }
+    final formatter = DateFormat('dd/MM/yyyy');
+    final Map<String, Map<String, dynamic>> grouped = {};
 
-    if (transaksi.isEmpty) return [];
-
-    final transaksiIds = transaksi.map((e) => e['id'] as String).toList();
-
-    final detailResponse = await supabase
-        .from('detail_transaksi')
-        .select('menu_id, qty, harga, transaksi_id')
-        .inFilter('transaksi_id', transaksiIds);
-
-    final menuResponse = await supabase.from('menu').select('id, name');
-
-    final Map<String, String> menuMap = {
-      for (final item in menuResponse)
-        item['id'] as String: item['name'] as String,
-    };
-
-    final Map<String, int> soldMap = {};
-    final Map<String, int> revenueMap = {};
-
-    for (final item in detailResponse) {
-      final menuId = item['menu_id'] as String;
-      final qty = ((item['qty'] ?? 0) as num).toInt();
-      final harga = ((item['harga'] ?? 0) as num).toInt();
-
-      soldMap[menuId] = (soldMap[menuId] ?? 0) + qty;
-      revenueMap[menuId] = (revenueMap[menuId] ?? 0) + (qty * harga);
-    }
-
-    final result = soldMap.entries.map((entry) {
-      final menuId = entry.key;
-      return {
-        'menu_id': menuId,
-        'name': menuMap[menuId] ?? 'Unknown',
-        'qty': entry.value,
-        'revenue': revenueMap[menuId] ?? 0,
-      };
-    }).toList();
-
-    result.sort((a, b) => (b['qty'] as int).compareTo(a['qty'] as int));
-    return result.take(5).toList();
-  }
-
-  Future<List<FlSpot>> getSalesTrend({
-    String? gerobakId,
-    int days = 1,
-  }) async {
-    final range = _getRange(days: days);
-
-    final List<dynamic> response;
-    if (gerobakId != null && gerobakId != 'all') {
-      response = await supabase
-          .from('transaksi')
-          .select('tanggal, total_harga')
-          .eq('gerobak_id', gerobakId)
-          .gte('tanggal', range.start.toIso8601String())
-          .lte('tanggal', range.end.toIso8601String())
-          .order('tanggal', ascending: true);
-    } else {
-      response = await supabase
-          .from('transaksi')
-          .select('tanggal, total_harga')
-          .gte('tanggal', range.start.toIso8601String())
-          .lte('tanggal', range.end.toIso8601String())
-          .order('tanggal', ascending: true);
-    }
-
-    if (days == 1) {
-      final List<int> hourlyTotals = List.filled(24, 0);
-
-      for (final item in response) {
-        final rawDate = item['tanggal'];
-        final date = DateTime.tryParse(rawDate.toString());
-        if (date == null) continue;
-
-        hourlyTotals[date.hour] += ((item['total_harga'] ?? 0) as num).toInt();
-      }
-
-      return List.generate(
-        24,
-        (index) => FlSpot(index.toDouble(), hourlyTotals[index].toDouble()),
-      );
-    }
-
-    final List<int> dailyTotals = List.filled(days, 0);
-
-    for (final item in response) {
-      final rawDate = item['tanggal'];
-      final date = DateTime.tryParse(rawDate.toString());
+    for (final item in transaksi) {
+      final date = DateTime.tryParse(item['tanggal'] ?? '');
       if (date == null) continue;
 
-      final diff = _startOfDay(date).difference(_startOfDay(range.start)).inDays;
-      if (diff >= 0 && diff < days) {
-        dailyTotals[diff] += ((item['total_harga'] ?? 0) as num).toInt();
-      }
+      final key = formatter.format(date);
+
+      grouped.putIfAbsent(key, () => {
+            'tanggal': key,
+            'totalRevenue': 0,
+            'totalOrders': 0,
+          });
+
+      grouped[key]!['totalRevenue'] += (item['total_harga'] as num).toInt();
+      grouped[key]!['totalOrders'] += 1;
     }
 
-    return List.generate(
-      days,
-      (index) => FlSpot(index.toDouble(), dailyTotals[index].toDouble()),
-    );
-  }
-
-  Future<List<Map<String, dynamic>>> getRecentSales({
-    String? gerobakId,
-    int days = 1,
-  }) async {
-    final range = _getRange(days: days);
-
-    final List<dynamic> transaksiToday;
-    if (gerobakId != null && gerobakId != 'all') {
-      transaksiToday = await supabase
-          .from('transaksi')
-          .select('id, tanggal, gerobak_id')
-          .eq('gerobak_id', gerobakId)
-          .gte('tanggal', range.start.toIso8601String())
-          .lte('tanggal', range.end.toIso8601String())
-          .order('tanggal', ascending: false);
-    } else {
-      transaksiToday = await supabase
-          .from('transaksi')
-          .select('id, tanggal, gerobak_id')
-          .gte('tanggal', range.start.toIso8601String())
-          .lte('tanggal', range.end.toIso8601String())
-          .order('tanggal', ascending: false);
-    }
-
-    if (transaksiToday.isEmpty) return [];
-
-    final transaksiMap = {
-      for (final trx in transaksiToday) trx['id'] as String: trx,
-    };
-
-    final transaksiIds = transaksiMap.keys.toList();
-
-    final detailResponse = await supabase
-        .from('detail_transaksi')
-        .select('qty, harga, transaksi_id, menu_id')
-        .inFilter('transaksi_id', transaksiIds);
-
-    final menuResponse = await supabase.from('menu').select('id, name');
-
-    final Map<String, String> menuMap = {
-      for (final item in menuResponse)
-        item['id'] as String: item['name'] as String,
-    };
-
-    final result = detailResponse.map<Map<String, dynamic>>((item) {
-      final menuId = item['menu_id'] as String;
-      final qty = ((item['qty'] ?? 0) as num).toInt();
-      final harga = ((item['harga'] ?? 0) as num).toInt();
-      final trxId = item['transaksi_id'] as String;
-      final trxData = transaksiMap[trxId] as Map<String, dynamic>? ?? {};
-
-      final rawDate = trxData['tanggal'];
-      final trxGerobakId = (trxData['gerobak_id'] ?? 'owner').toString();
+    return grouped.values.map((e) {
+      final revenue = e['totalRevenue'];
+      final orders = e['totalOrders'];
 
       return {
-        'name': menuMap[menuId] ?? 'Unknown',
-        'location': _getGerobakName(trxGerobakId),
-        'price': harga * qty,
-        'time': _formatTime(rawDate),
-        'rawDate': rawDate,
+        'tanggal': e['tanggal'],
+        'gerobakId': gerobakId,
+        'totalRevenue': revenue,
+        'totalOrders': orders,
+        'averageOrderValue':
+            orders > 0 ? (revenue / orders).round() : 0,
       };
     }).toList();
-
-    result.sort((a, b) {
-      final dateA = DateTime.tryParse(a['rawDate'].toString()) ?? DateTime(2000);
-      final dateB = DateTime.tryParse(b['rawDate'].toString()) ?? DateTime(2000);
-      return dateB.compareTo(dateA);
-    });
-
-    return result.take(10).toList();
   }
 
-  String getRangeLabel(int days) {
-    if (days == 1) {
-      return 'Hari ini';
-    }
-    return '7 hari terakhir';
-  }
+  // =============================
+  // SPREADSHEET URL
+  // =============================
 
-  String getTrendBottomLabel(double value, int days) {
-    if (days == 1) {
-      final hour = value.toInt();
-      if (hour % 6 != 0) return '';
-      return '${hour.toString().padLeft(2, '0')}:00';
+  String? getSpreadsheetUrl({
+    required String role,
+    String? gerobakId,
+    String? gerobakName,
+  }) {
+    if (role == 'owner') {
+      return 'https://docs.google.com/spreadsheets/d/1q0AsTVuUClnVPKluUINe83flIV8EsdDRoMTGQ-OqJ58/edit';
     }
 
-    const dayNames = ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'];
-    final now = DateTime.now();
-    final start = _startOfDay(now.subtract(Duration(days: days - 1)));
-    final date = start.add(Duration(days: value.toInt()));
-    return dayNames[date.weekday - 1];
+    final key = _resolveSpreadsheetKey(
+      gerobakId: gerobakId,
+      gerobakName: gerobakName,
+    );
+
+    if (key == null) return null;
+
+    const map = {
+      'gerobak_01':
+          'https://docs.google.com/spreadsheets/d/1963atrAPVOSWEUu6F63dF29moQRXbVCWnqPfxeZZ2zc/edit',
+      'gerobak_02':
+          'https://docs.google.com/spreadsheets/d/1pQN_M4b-w72e8imMKQbwl9RvFjYhq94BddbFj2839TU/edit',
+      'gerobak_03':
+          'https://docs.google.com/spreadsheets/d/1goGkG8TB4G-jJRLxRNFaVV90XQHzLEh36y6Og2OKT7g/edit',
+    };
+
+    return map[key];
   }
 
-  String _getGerobakName(String gerobakId) {
-    switch (gerobakId) {
-      case 'owner':
-        return 'Rumah Owner';
-      case 'gerobak_1':
-        return 'Gerobak 1';
-      case 'gerobak_2':
-        return 'Gerobak 2';
-      case 'gerobak_3':
-        return 'Gerobak 3';
-      default:
-        return 'Unknown';
+  String? getDownloadUrl({
+    required String role,
+    String? gerobakId,
+    String? gerobakName,
+  }) {
+    if (role == 'owner') {
+      return 'https://docs.google.com/spreadsheets/d/1q0AsTVuUClnVPKluUINe83flIV8EsdDRoMTGQ-OqJ58/export?format=xlsx';
     }
-  }
 
-  String _formatTime(dynamic rawDate) {
-    if (rawDate == null) return '-';
+    final key = _resolveSpreadsheetKey(
+      gerobakId: gerobakId,
+      gerobakName: gerobakName,
+    );
 
-    final date = DateTime.tryParse(rawDate.toString());
-    if (date == null) return '-';
+    if (key == null) return null;
 
-    final hour = date.hour.toString().padLeft(2, '0');
-    final minute = date.minute.toString().padLeft(2, '0');
+    const map = {
+      'gerobak_01':
+          'https://docs.google.com/spreadsheets/d/1963atrAPVOSWEUu6F63dF29moQRXbVCWnqPfxeZZ2zc/export?format=xlsx',
+      'gerobak_02':
+          'https://docs.google.com/spreadsheets/d/1pQN_M4b-w72e8imMKQbwl9RvFjYhq94BddbFj2839TU/export?format=xlsx',
+      'gerobak_03':
+          'https://docs.google.com/spreadsheets/d/1goGkG8TB4G-jJRLxRNFaVV90XQHzLEh36y6Og2OKT7g/export?format=xlsx',
+    };
 
-    return '$hour:$minute';
+    return map[key];
   }
 }

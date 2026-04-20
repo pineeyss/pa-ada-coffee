@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import '../../data/models/detail_transaksi_model.dart';
 import '../../data/models/transaksi_model.dart';
 import '../../data/services/stock_service.dart';
 import '../../data/services/transaksi_service.dart';
+import '../../data/services/report_service.dart';
+import '../../data/services/google_sheet_service.dart';
 import '../../utils/currency_formatter.dart';
 import '../widgets/app_button.dart';
 import '../widgets/empty_state.dart';
@@ -20,6 +23,7 @@ class SalesScreen extends StatefulWidget {
 class _SalesScreenState extends State<SalesScreen> {
   final StockService _stockService = StockService();
   final TransaksiService _transaksiService = TransaksiService();
+  final ReportService _reportService = ReportService();
 
   List<Map<String, dynamic>> items = [];
   List<Map<String, dynamic>> gerobakOptions = [];
@@ -44,6 +48,14 @@ class _SalesScreenState extends State<SalesScreen> {
 
     if (found.isEmpty) return '-';
     return found.first['nama_gerobak']?.toString() ?? '-';
+  }
+
+  String get todayText {
+    final now = DateTime.now();
+    final day = now.day.toString().padLeft(2, '0');
+    final month = now.month.toString().padLeft(2, '0');
+    final year = now.year;
+    return '$day/$month/$year';
   }
 
   void _handleSelectedGerobakChanged() {
@@ -196,6 +208,45 @@ class _SalesScreenState extends State<SalesScreen> {
     }
   }
 
+  Future<bool> _syncTodayReportToSpreadsheet() async {
+    if (selectedGerobakId == null) return false;
+
+    try {
+      final revenue = await _reportService.getTotalRevenue(
+        gerobakId: selectedGerobakId,
+      );
+
+      final orders = await _reportService.getTotalOrders(
+        gerobakId: selectedGerobakId,
+      );
+
+      final avg = orders > 0 ? (revenue / orders).round() : 0;
+
+      final success = await GoogleSheetService.sendReport(
+        tanggal: todayText,
+        gerobakId: selectedGerobakId!,
+        gerobakName: _selectedGerobakName,
+        name: _selectedGerobakName,
+        email: 'owner@email.com',
+        role: _role,
+        totalRevenue: revenue,
+        totalOrders: orders,
+        averageOrderValue: avg,
+      );
+
+      if (!success && kDebugMode) {
+        debugPrint('Spreadsheet sync gagal');
+      }
+
+      return success;
+    } catch (e) {
+      if (kDebugMode) {
+        debugPrint('Spreadsheet sync error: $e');
+      }
+      return false;
+    }
+  }
+
   Future<void> _recordSale() async {
     if (selectedItem == null || payment == null || selectedGerobakId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -269,6 +320,7 @@ class _SalesScreenState extends State<SalesScreen> {
         qty: qty,
       );
 
+      await _syncTodayReportToSpreadsheet();
       await loadMenusByGerobak();
 
       if (!mounted) return;
@@ -389,7 +441,7 @@ class _SalesScreenState extends State<SalesScreen> {
         assetPath,
         width: width,
         height: height,
-        fit: BoxFit.cover,
+        fit: BoxFit.contain,
         errorBuilder: (_, __, ___) {
           return Container(
             width: width,
@@ -403,6 +455,124 @@ class _SalesScreenState extends State<SalesScreen> {
             ),
           );
         },
+      ),
+    );
+  }
+
+  Widget _buildMenuCard({
+    required Map<String, dynamic> item,
+    required int index,
+  }) {
+    final menu = item['menu'] as Map<String, dynamic>? ?? {};
+
+    final String menuId = menu['id']?.toString() ?? '';
+    final String name = menu['name']?.toString() ?? '-';
+    final int price = ((menu['price'] ?? 0) as num).toInt();
+    final int stock = ((item['stock'] ?? 0) as num).toInt();
+
+    final isSelected = selectedItem?['menu_id'] == menuId;
+    final isOutOfStock = stock <= 0;
+    final isLowStock = stock > 0 && stock < 5;
+
+    return GestureDetector(
+      onTap: isOutOfStock
+          ? null
+          : () {
+              setState(() {
+                selectedItem = item;
+                qty = 1;
+                payment = null;
+              });
+            },
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        padding: const EdgeInsets.fromLTRB(10, 10, 10, 12),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          border: isSelected
+              ? Border.all(
+                  color: Colors.black,
+                  width: 1.8,
+                )
+              : Border.all(
+                  color: Colors.grey.shade200,
+                  width: 1,
+                ),
+          boxShadow: [
+            BoxShadow(
+              color: isSelected
+                  ? Colors.black.withAlpha(28)
+                  : Colors.black.withAlpha(8),
+              blurRadius: isSelected ? 12 : 8,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Align(
+              alignment: Alignment.topRight,
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 8,
+                  vertical: 4,
+                ),
+                decoration: BoxDecoration(
+                  color: isOutOfStock || isLowStock
+                      ? Colors.red
+                      : Colors.black87,
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Text(
+                  isOutOfStock ? "Habis" : "Stok $stock",
+                  style: const TextStyle(
+                    fontSize: 10,
+                    color: Colors.white,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 6),
+            SizedBox(
+              height: 110,
+              width: double.infinity,
+              child: Center(
+                child: _buildMenuImage(
+                  menuName: name,
+                  index: index,
+                  width: 92,
+                  height: 92,
+                  borderRadius: 16,
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              name,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                color: Colors.black87,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              _formatRupiah(price),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                color: Colors.black,
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -467,140 +637,12 @@ class _SalesScreenState extends State<SalesScreen> {
                                       crossAxisCount: 2,
                                       mainAxisSpacing: 12,
                                       crossAxisSpacing: 12,
-                                      childAspectRatio: 0.78,
+                                      childAspectRatio: 0.92,
                                     ),
                                     itemBuilder: (_, i) {
-                                      final item = items[i];
-                                      final menu =
-                                          item['menu'] as Map<String, dynamic>? ??
-                                              {};
-
-                                      final String menuId =
-                                          menu['id']?.toString() ?? '';
-                                      final String name =
-                                          menu['name']?.toString() ?? '-';
-                                      final int price =
-                                          ((menu['price'] ?? 0) as num).toInt();
-                                      final int stock =
-                                          ((item['stock'] ?? 0) as num).toInt();
-
-                                      final isSelected =
-                                          selectedItem?['menu_id'] == menuId;
-                                      final isOutOfStock = stock <= 0;
-                                      final isLowStock = stock > 0 && stock < 5;
-
-                                      return GestureDetector(
-                                        onTap: isOutOfStock
-                                            ? null
-                                            : () {
-                                                setState(() {
-                                                  selectedItem = item;
-                                                  qty = 1;
-                                                  payment = null;
-                                                });
-                                              },
-                                        child: AnimatedContainer(
-                                          duration:
-                                              const Duration(milliseconds: 180),
-                                          padding: const EdgeInsets.all(10),
-                                          decoration: BoxDecoration(
-                                            color: Colors.white,
-                                            borderRadius:
-                                                BorderRadius.circular(20),
-                                            border: isSelected
-                                                ? Border.all(
-                                                    color: Colors.black,
-                                                    width: 1.8,
-                                                  )
-                                                : Border.all(
-                                                    color: Colors.grey.shade200,
-                                                    width: 1,
-                                                  ),
-                                            boxShadow: [
-                                              BoxShadow(
-                                                color: isSelected
-                                                    ? Colors.black.withAlpha(35)
-                                                    : Colors.black.withAlpha(10),
-                                                blurRadius: isSelected ? 12 : 8,
-                                                offset: const Offset(0, 4),
-                                              ),
-                                            ],
-                                          ),
-                                          child: Column(
-                                            crossAxisAlignment:
-                                                CrossAxisAlignment.start,
-                                            children: [
-                                              Expanded(
-                                                child: Stack(
-                                                  children: [
-                                                    Positioned.fill(
-                                                      child: _buildMenuImage(
-                                                        menuName: name,
-                                                        index: i,
-                                                        borderRadius: 16,
-                                                      ),
-                                                    ),
-                                                    Positioned(
-                                                      top: 8,
-                                                      right: 8,
-                                                      child: Container(
-                                                        padding:
-                                                            const EdgeInsets.symmetric(
-                                                          horizontal: 8,
-                                                          vertical: 4,
-                                                        ),
-                                                        decoration: BoxDecoration(
-                                                          color: isOutOfStock ||
-                                                                  isLowStock
-                                                              ? Colors.red
-                                                              : Colors.black87,
-                                                          borderRadius:
-                                                              BorderRadius.circular(
-                                                            999,
-                                                          ),
-                                                        ),
-                                                        child: Text(
-                                                          isOutOfStock
-                                                              ? "Habis"
-                                                              : "Stok $stock",
-                                                          style:
-                                                              const TextStyle(
-                                                            fontSize: 10,
-                                                            color: Colors.white,
-                                                            fontWeight:
-                                                                FontWeight.w600,
-                                                          ),
-                                                        ),
-                                                      ),
-                                                    ),
-                                                  ],
-                                                ),
-                                              ),
-                                              const SizedBox(height: 10),
-                                              Text(
-                                                name,
-                                                maxLines: 2,
-                                                overflow: TextOverflow.ellipsis,
-                                                style: const TextStyle(
-                                                  fontSize: 13,
-                                                  fontWeight: FontWeight.w700,
-                                                  color: Colors.black87,
-                                                ),
-                                              ),
-                                              const SizedBox(height: 6),
-                                              Text(
-                                                _formatRupiah(price),
-                                                maxLines: 1,
-                                                overflow: TextOverflow.ellipsis,
-                                                style: const TextStyle(
-                                                  color: Colors.black,
-                                                  fontSize: 13,
-                                                  fontWeight: FontWeight.w700,
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
+                                      return _buildMenuCard(
+                                        item: items[i],
+                                        index: i,
                                       );
                                     },
                                   ),

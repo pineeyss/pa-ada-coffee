@@ -14,7 +14,7 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
-  final supabase = Supabase.instance.client;
+  final SupabaseClient supabase = Supabase.instance.client;
 
   Map<String, dynamic>? profileData;
   bool isLoading = true;
@@ -31,6 +31,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       final user = supabase.auth.currentUser;
 
       if (user == null) {
+        if (!mounted) return;
         setState(() => isLoading = false);
         return;
       }
@@ -48,7 +49,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         isLoading = false;
       });
 
-      debugPrint('PROFILE: $profile');
+      debugPrint('PROFILE DATA: $profile');
     } catch (e) {
       debugPrint('LOAD PROFILE ERROR: $e');
 
@@ -76,13 +77,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
       setState(() => isUploadingPhoto = true);
 
       final bytes = await image.readAsBytes();
-
       final ext = _getSafeExtension(image.name);
-      final filePath =
-          '${user.id}/profile_${DateTime.now().millisecondsSinceEpoch}.$ext';
 
-      debugPrint('IMAGE NAME: ${image.name}');
-      debugPrint('FILE PATH STORAGE: $filePath');
+      final fileName =
+          'profile_${DateTime.now().millisecondsSinceEpoch}.$ext';
+      final filePath = '${user.id}/$fileName';
+
+      debugPrint('UPLOAD FILE PATH: $filePath');
 
       await supabase.storage.from('avatars').uploadBinary(
             filePath,
@@ -94,12 +95,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
           );
 
       final publicUrl = supabase.storage.from('avatars').getPublicUrl(filePath);
-      final finalUrl = '$publicUrl?v=${DateTime.now().millisecondsSinceEpoch}';
+      final finalPhotoUrl =
+          '$publicUrl?v=${DateTime.now().millisecondsSinceEpoch}';
 
-      debugPrint('PUBLIC URL: $finalUrl');
+      debugPrint('FINAL PHOTO URL: $finalPhotoUrl');
 
       await supabase.from('profiles').update({
-        'photo_url': finalUrl,
+        'photo_url': finalPhotoUrl,
       }).eq('id', user.id);
 
       if (!mounted) return;
@@ -107,7 +109,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       setState(() {
         profileData = {
           ...?profileData,
-          'photo_url': finalUrl,
+          'photo_url': finalPhotoUrl,
         };
       });
 
@@ -137,10 +139,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final lower = fileName.toLowerCase();
 
     if (lower.endsWith('.png')) return 'png';
-    if (lower.endsWith('.webp')) return 'webp';
-    if (lower.endsWith('.gif')) return 'gif';
     if (lower.endsWith('.jpeg')) return 'jpeg';
     if (lower.endsWith('.jpg')) return 'jpg';
+    if (lower.endsWith('.webp')) return 'webp';
 
     return 'jpg';
   }
@@ -149,16 +150,23 @@ class _ProfileScreenState extends State<ProfileScreen> {
     switch (ext) {
       case 'png':
         return 'image/png';
-      case 'webp':
-        return 'image/webp';
-      case 'gif':
-        return 'image/gif';
       case 'jpeg':
         return 'image/jpeg';
       case 'jpg':
+        return 'image/jpeg';
+      case 'webp':
+        return 'image/webp';
       default:
         return 'image/jpeg';
     }
+  }
+
+  String _getPhotoUrl() {
+    final photoUrl = profileData?['photo_url']?.toString().trim() ?? '';
+
+    debugPrint('PHOTO URL FROM DB: $photoUrl');
+
+    return photoUrl;
   }
 
   Future<void> logout() async {
@@ -217,18 +225,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
-  String _getPhotoUrl() {
-    final photo = profileData?['photo_url']?.toString().trim();
-
-    debugPrint('PHOTO_URL DB: $photo');
-
-    if (photo != null && photo.isNotEmpty) {
-      return photo;
-    }
-
-    return '';
-  }
-
   Widget _buildAvatarImage() {
     final imageUrl = _getPhotoUrl();
 
@@ -258,7 +254,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         fit: BoxFit.cover,
         errorBuilder: (context, error, stackTrace) {
           debugPrint('IMAGE LOAD ERROR: $error');
-          debugPrint('FAILED URL: $imageUrl');
+          debugPrint('FAILED IMAGE URL: $imageUrl');
 
           return Container(
             width: 84,
@@ -361,7 +357,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   Widget build(BuildContext context) {
     final user = supabase.auth.currentUser;
-    final email = user?.email ?? "-";
+    final email = user?.email ?? '-';
     final name = profileData?['name']?.toString() ?? 'AD.A Coffee User';
     final role = formatRole(profileData?['role']?.toString());
 
@@ -374,7 +370,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 children: [
                   AppHeader(
                     title: const Text(
-                      "Profile",
+                      'Profile',
                       style: TextStyle(
                         color: Colors.white,
                         fontSize: 24,
@@ -449,13 +445,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           const SizedBox(height: 24),
                           _infoTile(
                             icon: Icons.verified_user_outlined,
-                            title: "Status",
-                            value: "Authenticated User",
+                            title: 'Status',
+                            value: 'Authenticated User',
                           ),
                           const SizedBox(height: 12),
                           _infoTile(
                             icon: Icons.badge_outlined,
-                            title: "Role",
+                            title: 'Role',
                             value: role,
                           ),
                           const SizedBox(height: 28),
@@ -465,14 +461,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               onPressed: () async {
                                 final ok = await DialogHelper.confirm(
                                   context,
-                                  title: "Logout",
-                                  message: "Yakin anda ingin keluar?",
+                                  title: 'Logout',
+                                  message: 'Yakin anda ingin keluar?',
                                 );
                                 if (!ok) return;
                                 await logout();
                               },
                               icon: const Icon(Icons.logout),
-                              label: const Text("Logout"),
+                              label: const Text('Logout'),
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: Colors.red,
                                 foregroundColor: Colors.white,

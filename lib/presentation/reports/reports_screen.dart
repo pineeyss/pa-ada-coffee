@@ -6,6 +6,7 @@ import '../../utils/currency_formatter.dart';
 import '../widgets/empty_state.dart';
 import '../widgets/header.dart';
 import '../../core/supabase/selected_gerobak_store.dart';
+import '../../data/services/google_sheet_service.dart';
 
 class ReportsScreen extends StatefulWidget {
   const ReportsScreen({super.key});
@@ -19,6 +20,10 @@ class _ReportsScreenState extends State<ReportsScreen> {
   final StockService _stockService = StockService();
 
   bool isLoading = true;
+  bool _isSyncingSheet = false;
+  bool _isSyncingHistoryAuto = false;
+  bool _hasSyncedHistoryOnce = false;
+  String? _lastSyncedHistoryGerobakId;
   String? errorMessage;
 
   int totalRevenue = 0;
@@ -44,19 +49,6 @@ class _ReportsScreenState extends State<ReportsScreen> {
     return found.first['nama_gerobak']?.toString() ?? '-';
   }
 
-  void _handleSelectedGerobakChanged() {
-    final newId = SelectedGerobakStore.selectedGerobakId;
-
-    if (newId == null || newId == selectedGerobakId) return;
-    if (!mounted) return;
-
-    setState(() {
-      selectedGerobakId = newId;
-    });
-
-    loadReports();
-  }
-
   @override
   void initState() {
     super.initState();
@@ -72,6 +64,21 @@ class _ReportsScreenState extends State<ReportsScreen> {
       _handleSelectedGerobakChanged,
     );
     super.dispose();
+  }
+
+  void _handleSelectedGerobakChanged() {
+    final newId = SelectedGerobakStore.selectedGerobakId;
+
+    if (newId == null || newId == selectedGerobakId) return;
+    if (!mounted) return;
+
+    setState(() {
+      selectedGerobakId = newId;
+      _hasSyncedHistoryOnce = false;
+      _lastSyncedHistoryGerobakId = null;
+    });
+
+    loadReports();
   }
 
   Future<void> initReports() async {
@@ -113,19 +120,22 @@ class _ReportsScreenState extends State<ReportsScreen> {
             )
           : gerobaks.first;
 
-      selectedGerobakId = selected['id']?.toString();
+      final selectedId = selected['id']?.toString();
+
+      if (!mounted) return;
+      setState(() {
+        _role = role;
+        gerobakOptions = gerobaks;
+        selectedGerobakId = selectedId;
+        _hasSyncedHistoryOnce = false;
+        _lastSyncedHistoryGerobakId = null;
+      });
 
       if (SelectedGerobakStore.selectedGerobak.value == null) {
         SelectedGerobakStore.setGerobak(
           GerobakItem.fromMap(selected),
         );
       }
-
-      if (!mounted) return;
-      setState(() {
-        _role = role;
-        gerobakOptions = gerobaks;
-      });
 
       await loadReports();
     } catch (e) {
@@ -171,15 +181,20 @@ class _ReportsScreenState extends State<ReportsScreen> {
         gerobakId: selectedGerobakId,
       );
 
+      final avg = orders > 0 ? (revenue / orders).round() : 0;
+
       if (!mounted) return;
       setState(() {
         totalRevenue = revenue;
         totalOrders = orders;
         weeklyRevenue = weeklyRev;
         weeklyOrders = weeklyOrd;
-        averageOrderValue = orders > 0 ? (revenue / orders).round() : 0;
+        averageOrderValue = avg;
         isLoading = false;
       });
+
+      await _autoSyncToSpreadsheet();
+      await _autoSyncHistoricalReports();
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -189,9 +204,91 @@ class _ReportsScreenState extends State<ReportsScreen> {
     }
   }
 
+  // 🔥 CARI INI DAN GANTI
+
+Future<void> _autoSyncToSpreadsheet() async {
+  if (_isSyncingSheet || selectedGerobakId == null) return;
+
+  _isSyncingSheet = true;
+
+  try {
+    await GoogleSheetService.sendReport(
+      tanggal: todayText,
+      gerobakId: selectedGerobakId!,
+      gerobakName: _selectedGerobakName,
+      name: _selectedGerobakName,
+      email: 'owner@email.com',
+      role: _role,
+      totalRevenue: totalRevenue,
+      totalOrders: totalOrders,
+      averageOrderValue: averageOrderValue,
+    );
+  } catch (e) {
+    debugPrint('Spreadsheet error: $e');
+  } finally {
+    _isSyncingSheet = false;
+  }
+}
+
+  Future<void> _autoSyncHistoricalReports() async {
+    if (_isSyncingHistoryAuto || selectedGerobakId == null) return;
+
+    final shouldSkip = _hasSyncedHistoryOnce &&
+        _lastSyncedHistoryGerobakId == selectedGerobakId;
+
+    if (shouldSkip) return;
+
+    _isSyncingHistoryAuto = true;
+
+    try {
+      final history = await _reportService.getHistoricalDailySummaries(
+        gerobakId: selectedGerobakId!,
+      );
+
+      if (history.isEmpty) {
+        _hasSyncedHistoryOnce = true;
+        _lastSyncedHistoryGerobakId = selectedGerobakId;
+        return;
+      }
+
+      final payload = history.map((item) {
+        return {
+          'action': 'sync_report',
+          'syncType': 'historical_summary',
+          'syncKey': '${item['gerobakId']}_${item['tanggal']}',
+          'tanggal': item['tanggal'],
+          'gerobakId': item['gerobakId'],
+          'gerobakName': _selectedGerobakName,
+          'name': _selectedGerobakName,
+          'email': 'owner@email.com',
+          'role': _role,
+          'totalRevenue': item['totalRevenue'],
+          'totalOrders': item['totalOrders'],
+          'averageOrderValue': item['averageOrderValue'],
+        };
+      }).toList();
+
+      final success = await GoogleSheetService.sendHistoricalReports(
+        reports: payload,
+      );
+
+      if (success) {
+        _hasSyncedHistoryOnce = true;
+        _lastSyncedHistoryGerobakId = selectedGerobakId;
+      }
+    } catch (e) {
+      if (mounted) {
+        _showSnackBar('Error sinkron histori laporan: $e');
+      }
+    } finally {
+      _isSyncingHistoryAuto = false;
+    }
+  }
+
   Future<void> _openSpreadsheet() async {
     final url = _reportService.getSpreadsheetUrl(
       role: _role,
+      gerobakId: selectedGerobakId,
       gerobakName: _selectedGerobakName,
     );
 
@@ -210,6 +307,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
   Future<void> _downloadReport() async {
     final url = _reportService.getDownloadUrl(
       role: _role,
+      gerobakId: selectedGerobakId,
       gerobakName: _selectedGerobakName,
     );
 
@@ -287,25 +385,21 @@ class _ReportsScreenState extends State<ReportsScreen> {
                           AppHeader(
                             subtitle: todayText,
                             child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 12),
+                              width: double.infinity,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 14,
+                              ),
                               decoration: BoxDecoration(
                                 color: Colors.white,
                                 borderRadius: BorderRadius.circular(12),
                               ),
-                              child: SizedBox(
-                                width: double.infinity,
-                                child: Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                    vertical: 14,
-                                  ),
-                                  child: Text(
-                                    _selectedGerobakName,
-                                    style: const TextStyle(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.black87,
-                                    ),
-                                  ),
+                              child: Text(
+                                _selectedGerobakName,
+                                style: const TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.black87,
                                 ),
                               ),
                             ),
@@ -315,7 +409,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
                             padding: const EdgeInsets.symmetric(horizontal: 12),
                             child: _buildSectionCard(
                               title: _isRider
-                                  ? "Laporan ${_selectedGerobakName}"
+                                  ? "Laporan $_selectedGerobakName"
                                   : "Laporan Keseluruhan",
                               child: Row(
                                 children: [
@@ -455,7 +549,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
   Widget _buildActionButton({
     required IconData icon,
     required String label,
-    required VoidCallback onTap,
+    required VoidCallback? onTap,
   }) {
     return SizedBox(
       height: 52,

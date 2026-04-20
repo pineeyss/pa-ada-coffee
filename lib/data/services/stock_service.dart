@@ -212,4 +212,27 @@ class StockService {
       });
     }
   }
+
+  Future<void> resetStockIfNewDay() async {
+  final today = DateTime.now();
+  final todayStr = "${today.year}-${today.month}-${today.day}";
+
+  final stocks = await supabase
+      .from('stocks')
+      .select('id, last_reset_date');
+
+  for (final item in stocks) {
+    final lastReset = item['last_reset_date']?.toString();
+
+    if (lastReset != todayStr) {
+      await supabase
+          .from('stocks')
+          .update({
+            'stock': 10,
+            'last_reset_date': todayStr,
+          })
+          .eq('id', item['id']);
+    }
+  }
+}
 }
