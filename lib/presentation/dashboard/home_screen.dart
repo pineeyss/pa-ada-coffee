@@ -382,17 +382,17 @@ class _HomeScreenState extends State<HomeScreen> {
       return Scaffold(
         body: Center(
           child: Padding(
-            padding: const EdgeInsets.all(24),
+            padding: EdgeInsets.all(24),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Icon(Icons.error_outline, size: 48, color: Colors.red),
-                const SizedBox(height: 12),
+                Icon(Icons.error_outline, size: 48, color: Colors.red),
+                SizedBox(height: 12),
                 Text(errorMessage!, textAlign: TextAlign.center),
-                const SizedBox(height: 16),
+                SizedBox(height: 16),
                 ElevatedButton(
                   onPressed: initDashboard,
-                  child: const Text('Coba Lagi'),
+                  child: Text('Coba Lagi'),
                 ),
               ],
             ),
@@ -412,13 +412,12 @@ class _HomeScreenState extends State<HomeScreen> {
               AppHeader(
                 subtitle: _getTodayText(),
                 child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 12,
-                  ),
+                  height: 50,
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  alignment: Alignment.center,
                   decoration: BoxDecoration(
                     color: Colors.white,
-                    borderRadius: BorderRadius.circular(14),
+                    borderRadius: BorderRadius.circular(16),
                   ),
                   child: _isRider
                       ? Row(
@@ -427,7 +426,7 @@ class _HomeScreenState extends State<HomeScreen> {
                               child: Text(
                                 _selectedGerobakName,
                                 style: const TextStyle(
-                                  fontSize: 16,
+                                  fontSize: 15,
                                   fontWeight: FontWeight.bold,
                                   color: Colors.black87,
                                 ),
@@ -435,69 +434,80 @@ class _HomeScreenState extends State<HomeScreen> {
                             ),
                           ],
                         )
-                      : DropdownButton<String>(
-                          isExpanded: true,
-                          underline: const SizedBox(),
-                          value: gerobakOptions.any(
-                            (item) =>
-                                item['id']?.toString() == selectedGerobakId,
-                          )
-                              ? selectedGerobakId
-                              : null,
-                          items: gerobakOptions.map((item) {
-                            return DropdownMenuItem<String>(
-                              value: item['id']?.toString(),
-                              child: Text(
-                                item['nama_gerobak']?.toString() ?? '-',
-                              ),
-                            );
-                          }).toList(),
-                          onChanged: (value) async {
-                            if (value == null) return;
+                      : DropdownButtonHideUnderline(
+                          child: DropdownButton<String>(
+                            value: gerobakOptions.any(
+                              (item) =>
+                                  item['id']?.toString() == selectedGerobakId,
+                            )
+                                ? selectedGerobakId
+                                : null,
+                            isExpanded: true,
+                            icon: const Icon(Icons.keyboard_arrow_down_rounded),
+                            style: const TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w700,
+                              color: Colors.black87,
+                            ),
+                            items: gerobakOptions.map((item) {
+                              return DropdownMenuItem<String>(
+                                value: item['id']?.toString(),
+                                child: Text(
+                                  item['nama_gerobak']?.toString() ?? '-',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              );
+                            }).toList(),
+                            onChanged: (value) async {
+                              if (value == null) return;
 
-                            final selected = gerobakOptions.firstWhere(
-                              (item) => item['id']?.toString() == value,
-                            );
+                              final selected = gerobakOptions.firstWhere(
+                                (item) => item['id']?.toString() == value,
+                              );
 
-                            if (!mounted) return;
-                            setState(() => selectedGerobakId = value);
+                              setState(() => selectedGerobakId = value);
 
-                            _saveSelectedGerobakToStore(selected);
+                              _saveSelectedGerobakToStore(selected);
 
-                            await loadDashboard();
-                          },
+                              await loadDashboard();
+                            },
+                          ),
                         ),
                 ),
               ),
-              if (lowStockCount > 0)
-                Padding(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                  child: Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: Colors.red.withAlpha(20),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.warning, color: Colors.red),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            "$lowStockCount item stock hampir habis",
-                            style: const TextStyle(color: Colors.red),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
               const SizedBox(height: 16),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 14),
                 child: Column(
                   children: [
+                    if (lowStockCount > 0) ...[
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: Colors.red.withAlpha(20),
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(
+                              Icons.warning_rounded,
+                              color: Colors.red,
+                            ),
+                            const SizedBox(width: 10),
+                            Text(
+                              "$lowStockCount item stock hampir habis",
+                              style: const TextStyle(
+                                color: Colors.red,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                    ],
                     Container(
                       padding: const EdgeInsets.all(14),
                       decoration: BoxDecoration(
