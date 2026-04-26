@@ -145,8 +145,8 @@ class _SalesScreenState extends State<SalesScreen> {
       final storeId = SelectedGerobakStore.selectedGerobakId;
 
       final selected = gerobaks.any(
-              (item) => item['id']?.toString() == storeId,
-            )
+        (item) => item['id']?.toString() == storeId,
+      )
           ? gerobaks.firstWhere(
               (item) => item['id']?.toString() == storeId,
             )
@@ -215,7 +215,8 @@ class _SalesScreenState extends State<SalesScreen> {
         setState(() => isLoading = true);
       }
 
-      final stockData = await _stockService.getStocksByGerobak(selectedGerobakId!);
+      final stockData =
+          await _stockService.getStocksByGerobak(selectedGerobakId!);
 
       List<dynamic> serviceMenus = [];
       try {
@@ -283,13 +284,15 @@ class _SalesScreenState extends State<SalesScreen> {
         stockByName[_normalizeName(stockMenuName)] = stock;
       }
 
-      final List<Map<String, dynamic>> finalItems = mergedMasterByName.entries.map((entry) {
+      final List<Map<String, dynamic>> finalItems =
+          mergedMasterByName.entries.map((entry) {
         final master = entry.value;
         final stockItem = stockByName[entry.key];
         final stockMenu = stockItem?['menu'] as Map<String, dynamic>? ?? {};
 
         final dynamic finalMenuId = stockMenu['id'] ?? master['id'];
-        final int finalPrice = ((stockMenu['price'] ?? master['price'] ?? 0) as num).toInt();
+        final int finalPrice =
+            ((stockMenu['price'] ?? master['price'] ?? 0) as num).toInt();
 
         return {
           'id': stockItem?['id'],
@@ -311,8 +314,10 @@ class _SalesScreenState extends State<SalesScreen> {
       }).toList();
 
       finalItems.sort((a, b) {
-        final nameA = ((a['menu'] as Map<String, dynamic>?)?['name'] ?? '').toString();
-        final nameB = ((b['menu'] as Map<String, dynamic>?)?['name'] ?? '').toString();
+        final nameA =
+            ((a['menu'] as Map<String, dynamic>?)?['name'] ?? '').toString();
+        final nameB =
+            ((b['menu'] as Map<String, dynamic>?)?['name'] ?? '').toString();
         return nameA.compareTo(nameB);
       });
 
@@ -320,36 +325,6 @@ class _SalesScreenState extends State<SalesScreen> {
       setState(() {
         items = finalItems;
         isLoading = false;
-
-        if (selectedItem != null) {
-          final selectedMenuName = ((selectedItem!['menu'] as Map<String, dynamic>?)?['name'] ?? '').toString();
-          final selectedNormalized = _normalizeName(selectedMenuName);
-
-          final stillExists = items.any((item) {
-            final itemName = (((item['menu'] as Map<String, dynamic>?)?['name']) ?? '').toString();
-            return _normalizeName(itemName) == selectedNormalized;
-          });
-
-          if (!stillExists) {
-            selectedItem = null;
-            qty = 1;
-            payment = null;
-          } else {
-            final freshSelected = items.firstWhere((item) {
-              final itemName = (((item['menu'] as Map<String, dynamic>?)?['name']) ?? '').toString();
-              return _normalizeName(itemName) == selectedNormalized;
-            });
-
-            selectedItem = freshSelected;
-
-            final latestStock = ((freshSelected['stock'] ?? 0) as num).toInt();
-            if (latestStock <= 0) {
-              qty = 1;
-            } else if (qty > latestStock) {
-              qty = latestStock;
-            }
-          }
-        }
       });
     } catch (e) {
       if (!mounted) return;
@@ -359,8 +334,7 @@ class _SalesScreenState extends State<SalesScreen> {
       );
     }
   }
-
-  Future<bool> _syncTodayReportToSpreadsheet() async {
+    Future<bool> _syncTodayReportToSpreadsheet() async {
     if (selectedGerobakId == null) return false;
 
     try {
@@ -639,14 +613,8 @@ class _SalesScreenState extends State<SalesScreen> {
           color: Colors.white,
           borderRadius: BorderRadius.circular(20),
           border: isSelected
-              ? Border.all(
-                  color: Colors.black,
-                  width: 1.8,
-                )
-              : Border.all(
-                  color: Colors.grey.shade200,
-                  width: 1,
-                ),
+              ? Border.all(color: Colors.black, width: 1.8)
+              : Border.all(color: Colors.grey.shade200, width: 1),
           boxShadow: [
             BoxShadow(
               color: isSelected
@@ -684,9 +652,7 @@ class _SalesScreenState extends State<SalesScreen> {
               ),
             ),
             const SizedBox(height: 6),
-            SizedBox(
-              height: 110,
-              width: double.infinity,
+            Expanded(
               child: Center(
                 child: _buildMenuImage(
                   menuName: name,
@@ -700,11 +666,11 @@ class _SalesScreenState extends State<SalesScreen> {
             const SizedBox(height: 8),
             Text(
               name,
-              maxLines: 2,
+              maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
+                fontSize: 14,
+                fontWeight: FontWeight.w800,
                 color: Colors.black87,
               ),
             ),
@@ -731,77 +697,77 @@ class _SalesScreenState extends State<SalesScreen> {
       backgroundColor: const Color(0xFFF5F5F5),
       body: isLoading
           ? const Center(child: CircularProgressIndicator())
-          : SafeArea(
-              child: Column(
-                children: [
-                  Expanded(
-                    child: SingleChildScrollView(
-                      child: Column(
-                        children: [
-                           AppHeader(
-                  subtitle: todayText,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 12,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Row(
+          : Column(
+              children: [
+                Expanded(
+                  child: SingleChildScrollView(
+                    child: Column(
                       children: [
-                        Expanded(
-                          child: Text(
-                            _selectedGerobakName,
-                            style: const TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.black87,
+                        AppHeader(
+                          subtitle: todayText,
+                          child: Container(
+                            height: 50,
+                            padding: const EdgeInsets.symmetric(horizontal: 16),
+                            alignment: Alignment.center,
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    _selectedGerobakName,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.black87,
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ),
+                        const SizedBox(height: 10),
+                        Padding(
+                          padding: const EdgeInsets.all(12),
+                          child: items.isEmpty
+                              ? const EmptyState(
+                                  icon: Icons.inventory_2_outlined,
+                                  title: "Menu belum tersedia",
+                                  subtitle:
+                                      "Belum ada item yang bisa dijual untuk gerobak ini.",
+                                )
+                              : GridView.builder(
+                                  shrinkWrap: true,
+                                  physics:
+                                      const NeverScrollableScrollPhysics(),
+                                  itemCount: items.length,
+                                  gridDelegate:
+                                      const SliverGridDelegateWithFixedCrossAxisCount(
+                                    crossAxisCount: 2,
+                                    mainAxisSpacing: 14,
+                                    crossAxisSpacing: 14,
+                                    childAspectRatio: 0.72,
+                                  ),
+                                  itemBuilder: (_, i) {
+                                    return _buildMenuCard(
+                                      item: items[i],
+                                      index: i,
+                                    );
+                                  },
+                                ),
+                        ),
+                        const SizedBox(height: 100),
                       ],
                     ),
                   ),
                 ),
-                          const SizedBox(height: 10),
-                          Padding(
-                            padding: const EdgeInsets.all(12),
-                            child: items.isEmpty
-                                ? const EmptyState(
-                                    icon: Icons.inventory_2_outlined,
-                                    title: "Menu belum tersedia",
-                                    subtitle:
-                                        "Belum ada item yang bisa dijual untuk gerobak ini.",
-                                  )
-                                : GridView.builder(
-                                    shrinkWrap: true,
-                                    physics: const NeverScrollableScrollPhysics(),
-                                    itemCount: items.length,
-                                    gridDelegate:
-                                        const SliverGridDelegateWithFixedCrossAxisCount(
-                                      crossAxisCount: 2,
-                                      mainAxisSpacing: 12,
-                                      crossAxisSpacing: 12,
-                                      childAspectRatio: 0.92,
-                                    ),
-                                    itemBuilder: (_, i) {
-                                      return _buildMenuCard(
-                                        item: items[i],
-                                        index: i,
-                                      );
-                                    },
-                                  ),
-                          ),
-                          const SizedBox(height: 100),
-                        ],
-                      ),
-                    ),
-                  ),
-                  if (selectedItem != null) _buildBottomCheckout(),
-                ],
-              ),
+                if (selectedItem != null) _buildBottomCheckout(),
+              ],
             ),
     );
   }

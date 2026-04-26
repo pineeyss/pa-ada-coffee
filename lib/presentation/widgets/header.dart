@@ -16,77 +16,81 @@ class AppHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final topPadding = MediaQuery.of(context).padding.top;
+
     return Container(
       width: double.infinity,
-      decoration: const BoxDecoration(
-        borderRadius: BorderRadius.vertical(
-          bottom: Radius.circular(28),
+      color: const Color(0xFFF5F5F5), // ini biar ada putih di atas
+      padding: EdgeInsets.only(top: topPadding),
+      child: Container(
+        width: double.infinity,
+        decoration: const BoxDecoration(
+          borderRadius: BorderRadius.vertical(
+            bottom: Radius.circular(24),
+          ),
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              Color(0xFFFF8A2A),
+              Color(0xFFFFB15C),
+            ],
+          ),
         ),
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            Color(0xFFFF8A2A),
-            Color(0xFFFFB15C),
-          ],
-        ),
-      ),
-      child: ClipRRect(
-        borderRadius: const BorderRadius.vertical(
-          bottom: Radius.circular(28),
-        ),
-        child: Stack(
-          children: [
-            Positioned.fill(
-              child: Opacity(
-                opacity: 0.035,
-                child: Image.asset(
-                  'assets/images/background.png',
-                  fit: BoxFit.cover,
-                  alignment: Alignment.center,
+        child: ClipRRect(
+          borderRadius: const BorderRadius.vertical(
+            bottom: Radius.circular(24),
+          ),
+          child: Stack(
+            children: [
+              // 🔥 BALIKIN BACKGROUND KOPI
+              Positioned.fill(
+                child: Opacity(
+                  opacity: 0.04,
+                  child: Image.asset(
+                    'assets/images/background.png', // pastikan ini ada
+                    fit: BoxFit.cover,
+                  ),
                 ),
               ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 20, 16, 18),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (leading != null) ...[
-                    leading!,
-                    const SizedBox(height: 4),
-                  ],
-                  Image.asset(
-                    'assets/images/logo.png',
-                    width: 130,
-                    fit: BoxFit.contain,
-                  ),
-                  const SizedBox(height: 8),
-                  if (title != null) ...[
-                    DefaultTextStyle(
-                      style: const TextStyle(color: Colors.white),
-                      child: title!,
+
+              Padding(
+                padding: const EdgeInsets.fromLTRB(24, 22, 24, 22),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (leading != null) ...[
+                      leading!,
+                      const SizedBox(height: 8),
+                    ],
+
+                    title ??
+                        Image.asset(
+                          'assets/images/logo.png',
+                          width: 145,
+                          fit: BoxFit.contain,
+                        ),
+
+                    const SizedBox(height: 8),
+
+                    Text(
+                      subtitle,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
-                    const SizedBox(height: 6),
+
+                    if (child != null) ...[
+                      const SizedBox(height: 18),
+                      child!,
+                    ],
                   ],
-                  Text(
-                    subtitle,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: Colors.white70,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                  if (child != null) ...[
-                    const SizedBox(height: 16),
-                    child!,
-                  ],
-                ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
