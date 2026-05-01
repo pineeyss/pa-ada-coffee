@@ -1,18 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart';
-import '../../data/models/detail_transaksi_model.dart';
-import '../../data/models/transaksi_model.dart';
-import '../../data/services/stock_service.dart';
-import '../../data/services/transaksi_service.dart';
-import '../../data/services/report_service.dart';
-import '../../data/services/google_sheet_service.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:intl/intl.dart';
 import '../../utils/currency_formatter.dart';
-import '../widgets/app_button.dart';
-import '../widgets/empty_state.dart';
-import '../widgets/header.dart';
-import '../../utils/dialog_helper.dart';
 import '../../core/supabase/selected_gerobak_store.dart';
-import '../../data/services/menu_service.dart';
+import '../widgets/header.dart';
+import '../widgets/empty_state.dart';
 
 class SalesScreen extends StatefulWidget {
   const SalesScreen({super.key});
@@ -22,991 +14,214 @@ class SalesScreen extends StatefulWidget {
 }
 
 class _SalesScreenState extends State<SalesScreen> {
-  final StockService _stockService = StockService();
-  final MenuService _menuService = MenuService();
-  final TransaksiService _transaksiService = TransaksiService();
-  final ReportService _reportService = ReportService();
-
-  List<Map<String, dynamic>> items = [];
+  final SupabaseClient supabase = Supabase.instance.client;
+  List<Map<String, dynamic>> menuItems = [];
   List<Map<String, dynamic>> gerobakOptions = [];
-
-  Map<String, dynamic>? selectedItem;
-  String? selectedGerobakId;
-  String _role = 'owner';
-
   bool isLoading = true;
-  bool isSaving = false;
-  int qty = 1;
-  String? payment;
-
-  bool get _isRider => _role == 'rider';
-
-  String get _selectedGerobakName {
-    if (gerobakOptions.isEmpty || selectedGerobakId == null) return '-';
-
-    final found = gerobakOptions.where(
-      (item) => item['id']?.toString() == selectedGerobakId,
-    );
-
-    if (found.isEmpty) return '-';
-    return found.first['nama_gerobak']?.toString() ?? '-';
-  }
-
-  String get todayText {
-    final now = DateTime.now();
-
-    const days = [
-      'Senin',
-      'Selasa',
-      'Rabu',
-      'Kamis',
-      'Jumat',
-      'Sabtu',
-      'Minggu',
-    ];
-
-    const months = [
-      'Januari',
-      'Februari',
-      'Maret',
-      'April',
-      'Mei',
-      'Juni',
-      'Juli',
-      'Agustus',
-      'September',
-      'Oktober',
-      'November',
-      'Desember',
-    ];
-
-    return '${days[now.weekday - 1]}, ${now.day} ${months[now.month - 1]} ${now.year}';
-  }
-
-  void _handleSelectedGerobakChanged() {
-    final newId = SelectedGerobakStore.selectedGerobakId;
-
-    if (newId == null || newId == selectedGerobakId) return;
-    if (!mounted) return;
-
-    setState(() {
-      selectedGerobakId = newId;
-      selectedItem = null;
-      qty = 1;
-      payment = null;
-    });
-
-    loadMenusByGerobak();
-  }
+  String? selectedGerobakId;
 
   @override
   void initState() {
     super.initState();
-
-    SelectedGerobakStore.selectedGerobak.addListener(
-      _handleSelectedGerobakChanged,
-    );
-
-    initSales();
+    _initializeData();
+    SelectedGerobakStore.selectedGerobak.addListener(_handleSelectedGerobakChanged);
   }
 
   @override
   void dispose() {
-    SelectedGerobakStore.selectedGerobak.removeListener(
-      _handleSelectedGerobakChanged,
-    );
+    SelectedGerobakStore.selectedGerobak.removeListener(_handleSelectedGerobakChanged);
     super.dispose();
   }
 
-  Future<void> initSales() async {
+  Future<void> _initializeData() async {
     try {
+      final response = await supabase.from('gerobak').select('id, nama_gerobak');
+      
       if (mounted) {
-        setState(() => isLoading = true);
-      }
-
-      final role = await _stockService.getCurrentUserRole();
-      final gerobaks = await _stockService.getGerobakOptionsByRole();
-
-      if (gerobaks.isEmpty) {
-        if (!mounted) return;
         setState(() {
-          _role = role;
-          gerobakOptions = [];
-          selectedGerobakId = null;
-          selectedItem = null;
-          items = [];
-          qty = 1;
-          payment = null;
+          gerobakOptions = List<Map<String, dynamic>>.from(response);
+          selectedGerobakId = SelectedGerobakStore.selectedGerobakId ?? 
+                             (gerobakOptions.isNotEmpty ? gerobakOptions[0]['id'].toString() : null);
+        });
+        _loadMenuData();
+      }
+    } catch (e) {
+      debugPrint("Error initializing data: $e");
+    }
+  }
+
+  void _handleSelectedGerobakChanged() {
+    if (!mounted) return;
+    setState(() {
+      selectedGerobakId = SelectedGerobakStore.selectedGerobakId;
+    });
+    _loadMenuData();
+  }
+
+  Future<void> _loadMenuData() async {
+    if (selectedGerobakId == null) return;
+    try {
+      if (mounted) setState(() => isLoading = true);
+      
+      // Mengambil stok dan data menu (termasuk image_url)
+      final data = await supabase
+          .from('stok_gerobak')
+          .select('stok_saat_ini, menu(id, name, price, image_url)')
+          .eq('gerobak_id', selectedGerobakId!);
+
+      if (mounted) {
+        setState(() {
+          menuItems = List<Map<String, dynamic>>.from(data);
           isLoading = false;
         });
-        return;
       }
-
-      final storeId = SelectedGerobakStore.selectedGerobakId;
-
-      final selected = gerobaks.any(
-        (item) => item['id']?.toString() == storeId,
-      )
-          ? gerobaks.firstWhere(
-              (item) => item['id']?.toString() == storeId,
-            )
-          : gerobaks.first;
-
-      selectedGerobakId = selected['id']?.toString();
-
-      if (SelectedGerobakStore.selectedGerobak.value == null) {
-        SelectedGerobakStore.setGerobak(
-          GerobakItem.fromMap(selected),
-        );
-      }
-
-      if (!mounted) return;
-      setState(() {
-        _role = role;
-        gerobakOptions = gerobaks;
-      });
-
-      await loadMenusByGerobak();
     } catch (e) {
-      if (!mounted) return;
-      setState(() => isLoading = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Gagal load sales: $e")),
-      );
+      debugPrint("Error loading sales: $e");
+      if (mounted) setState(() => isLoading = false);
     }
-  }
-
-  List<Map<String, dynamic>> _fallbackMasterMenus() {
-    return [
-      {'id': 'fallback_americano', 'name': 'Americano', 'price': 13000, 'category': 'coffee', 'emoji': '☕'},
-      {'id': 'fallback_pandawa', 'name': 'Pandawa', 'price': 13000, 'category': 'coffee', 'emoji': '☕'},
-      {'id': 'fallback_butterscotch', 'name': 'Butterscotch', 'price': 13000, 'category': 'coffee', 'emoji': '☕'},
-      {'id': 'fallback_caramel', 'name': 'Caramel', 'price': 13000, 'category': 'coffee', 'emoji': '☕'},
-      {'id': 'fallback_hazelnut', 'name': 'Hazelnut', 'price': 13000, 'category': 'coffee', 'emoji': '☕'},
-      {'id': 'fallback_salted_caramel', 'name': 'Salted Caramel', 'price': 13000, 'category': 'coffee', 'emoji': '☕'},
-      {'id': 'fallback_mico', 'name': 'Mico', 'price': 13000, 'category': 'coffee', 'emoji': '☕'},
-      {'id': 'fallback_lowco', 'name': 'Lowco', 'price': 13000, 'category': 'coffee', 'emoji': '☕'},
-      {'id': 'fallback_matcha', 'name': 'Matcha', 'price': 13000, 'category': 'non-coffee', 'emoji': '🍵'},
-      {'id': 'fallback_taro', 'name': 'Taro', 'price': 13000, 'category': 'non-coffee', 'emoji': '🧋'},
-      {'id': 'fallback_red_velvet', 'name': 'Red Velvet', 'price': 13000, 'category': 'non-coffee', 'emoji': '🥤'},
-      {'id': 'fallback_choco', 'name': 'Choco', 'price': 12000, 'category': 'non-coffee', 'emoji': '🍫'},
-    ];
-  }
-
-  String _normalizeName(String value) {
-    return value.toLowerCase().trim().replaceAll(RegExp(r'[^a-z0-9]+'), ' ');
-  }
-
-  Future<void> loadMenusByGerobak() async {
-    if (selectedGerobakId == null) {
-      if (!mounted) return;
-      setState(() {
-        items = [];
-        selectedItem = null;
-        qty = 1;
-        payment = null;
-        isLoading = false;
-      });
-      return;
-    }
-
-    try {
-      if (mounted) {
-        setState(() => isLoading = true);
-      }
-
-      final stockData =
-          await _stockService.getStocksByGerobak(selectedGerobakId!);
-
-      List<dynamic> serviceMenus = [];
-      try {
-        serviceMenus = await _menuService.getMenus();
-      } catch (_) {
-        serviceMenus = [];
-      }
-
-      final fallbackMenus = _fallbackMasterMenus();
-
-      final Map<String, Map<String, dynamic>> mergedMasterByName = {};
-
-      for (final menu in fallbackMenus) {
-        final normalized = _normalizeName(menu['name'].toString());
-        mergedMasterByName[normalized] = {
-          'id': menu['id'],
-          'name': menu['name'],
-          'price': menu['price'],
-          'category': menu['category'],
-          'emoji': menu['emoji'],
-          'created_at': null,
-        };
-      }
-
-      for (final menu in serviceMenus) {
-        final name = (menu.name ?? '').toString();
-        if (name.isEmpty) continue;
-
-        final normalized = _normalizeName(name);
-        mergedMasterByName[normalized] = {
-          'id': menu.id,
-          'name': menu.name,
-          'price': menu.price ?? 0,
-          'category': menu.category,
-          'emoji': menu.emoji,
-          'created_at': menu.createdAt?.toIso8601String(),
-        };
-      }
-
-      for (final stock in stockData) {
-        final stockMenu = stock['menu'] as Map<String, dynamic>? ?? {};
-        final stockMenuName = stockMenu['name']?.toString() ?? '';
-        if (stockMenuName.isEmpty) continue;
-
-        final normalized = _normalizeName(stockMenuName);
-
-        mergedMasterByName.putIfAbsent(normalized, () {
-          return {
-            'id': stockMenu['id'],
-            'name': stockMenu['name'],
-            'price': stockMenu['price'] ?? 0,
-            'category': stockMenu['category'],
-            'emoji': stockMenu['emoji'],
-            'created_at': stockMenu['created_at'],
-          };
-        });
-      }
-
-      final Map<String, Map<String, dynamic>> stockByName = {};
-      for (final stock in stockData) {
-        final stockMenu = stock['menu'] as Map<String, dynamic>? ?? {};
-        final stockMenuName = stockMenu['name']?.toString() ?? '';
-        if (stockMenuName.isEmpty) continue;
-
-        stockByName[_normalizeName(stockMenuName)] = stock;
-      }
-
-      final List<Map<String, dynamic>> finalItems =
-          mergedMasterByName.entries.map((entry) {
-        final master = entry.value;
-        final stockItem = stockByName[entry.key];
-        final stockMenu = stockItem?['menu'] as Map<String, dynamic>? ?? {};
-
-        final dynamic finalMenuId = stockMenu['id'] ?? master['id'];
-        final int finalPrice =
-            ((stockMenu['price'] ?? master['price'] ?? 0) as num).toInt();
-
-        return {
-          'id': stockItem?['id'],
-          'gerobak_id': selectedGerobakId,
-          'menu_id': finalMenuId?.toString(),
-          'stok_awal': stockItem?['stok_awal'] ?? 0,
-          'stok_saat_ini': stockItem?['stok_saat_ini'] ?? 0,
-          'created_at': stockItem?['created_at'],
-          'stock': ((stockItem?['stok_saat_ini'] ?? 0) as num).toInt(),
-          'menu': {
-            'id': finalMenuId,
-            'name': stockMenu['name'] ?? master['name'],
-            'price': finalPrice,
-            'category': stockMenu['category'] ?? master['category'],
-            'emoji': stockMenu['emoji'] ?? master['emoji'],
-            'created_at': stockMenu['created_at'] ?? master['created_at'],
-          },
-        };
-      }).toList();
-
-      finalItems.sort((a, b) {
-        final nameA =
-            ((a['menu'] as Map<String, dynamic>?)?['name'] ?? '').toString();
-        final nameB =
-            ((b['menu'] as Map<String, dynamic>?)?['name'] ?? '').toString();
-        return nameA.compareTo(nameB);
-      });
-
-      if (!mounted) return;
-      setState(() {
-        items = finalItems;
-        isLoading = false;
-      });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => isLoading = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Gagal load menu: $e")),
-      );
-    }
-  }
-    Future<bool> _syncTodayReportToSpreadsheet() async {
-    if (selectedGerobakId == null) return false;
-
-    try {
-      final revenue = await _reportService.getTotalRevenue(
-        gerobakId: selectedGerobakId,
-      );
-
-      final orders = await _reportService.getTotalOrders(
-        gerobakId: selectedGerobakId,
-      );
-
-      final avg = orders > 0 ? (revenue / orders).round() : 0;
-
-      final success = await GoogleSheetService.sendReport(
-        tanggal: todayText,
-        gerobakId: selectedGerobakId!,
-        gerobakName: _selectedGerobakName,
-        name: _selectedGerobakName,
-        email: 'owner@email.com',
-        role: _role,
-        totalRevenue: revenue,
-        totalOrders: orders,
-        averageOrderValue: avg,
-      );
-
-      if (!success && kDebugMode) {
-        debugPrint('Spreadsheet sync gagal');
-      }
-
-      return success;
-    } catch (e) {
-      if (kDebugMode) {
-        debugPrint('Spreadsheet sync error: $e');
-      }
-      return false;
-    }
-  }
-
-  Future<void> _recordSale() async {
-    if (selectedItem == null || payment == null || selectedGerobakId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Pilih menu dan metode pembayaran dulu")),
-      );
-      return;
-    }
-
-    try {
-      final ok = await DialogHelper.confirm(
-        context,
-        title: "Simpan Transaksi",
-        message: "Apakah data sudah benar?",
-      );
-
-      if (!ok) return;
-
-      if (mounted) {
-        setState(() => isSaving = true);
-      }
-
-      final menu = selectedItem!['menu'] as Map<String, dynamic>? ?? {};
-      final String menuId = menu['id']?.toString() ?? '';
-      final String menuName = menu['name']?.toString() ?? '-';
-      final int price = ((menu['price'] ?? 0) as num).toInt();
-      final int currentStock = ((selectedItem!['stock'] ?? 0) as num).toInt();
-
-      if (menuId.isEmpty) {
-        throw Exception('Menu tidak valid');
-      }
-
-      if (qty <= 0) {
-        throw Exception('Qty tidak valid');
-      }
-
-      if (currentStock <= 0) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Stock $menuName sudah habis")),
-        );
-        return;
-      }
-
-      if (currentStock < qty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Stock $menuName tidak mencukupi")),
-        );
-        return;
-      }
-
-      final total = price * qty;
-
-      final transaksiId = await _transaksiService.createTransaksi(
-        TransaksiModel(
-          totalHarga: total,
-          gerobakId: selectedGerobakId!,
-        ),
-      );
-
-      await _transaksiService.addDetail(
-        DetailTransaksiModel(
-          transaksiId: transaksiId,
-          menuId: menuId,
-          qty: qty,
-          harga: price,
-        ),
-      );
-
-      await _stockService.decreaseStock(
-        menuId: menuId,
-        gerobakId: selectedGerobakId!,
-        qty: qty,
-      );
-
-      await _syncTodayReportToSpreadsheet();
-      await loadMenusByGerobak();
-
-      if (!mounted) return;
-
-      _showSuccess();
-
-      setState(() {
-        selectedItem = null;
-        payment = null;
-        qty = 1;
-      });
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Gagal simpan transaksi: $e")),
-      );
-    } finally {
-      if (mounted) {
-        setState(() => isSaving = false);
-      }
-    }
-  }
-
-  void _showSuccess() {
-    showDialog(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text("Berhasil"),
-        content: const Text("Transaksi berhasil disimpan"),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text("OK"),
-          ),
-        ],
-      ),
-    );
-  }
-
-  String _formatRupiah(int value) {
-    return CurrencyFormatter.format(value);
-  }
-
-  int get _selectedPrice {
-    final menu = selectedItem?['menu'] as Map<String, dynamic>? ?? {};
-    return ((menu['price'] ?? 0) as num).toInt();
-  }
-
-  String get _selectedName {
-    final menu = selectedItem?['menu'] as Map<String, dynamic>? ?? {};
-    return menu['name']?.toString() ?? '-';
-  }
-
-  int get _selectedStock {
-    return ((selectedItem?['stock'] ?? 0) as num).toInt();
-  }
-
-  int get _totalPrice {
-    return _selectedPrice * qty;
-  }
-
-  String? _getMenuImageAssetByName(String menuName) {
-    final name = _normalizeName(menuName);
-
-    const imageMap = <String, String>{
-      'americano': 'assets/images/menu_07.png',
-      'pandawa': 'assets/images/menu_06.png',
-      'butterscotch': 'assets/images/menu_06.png',
-      'caramel': 'assets/images/menu_06.png',
-      'hazelnut': 'assets/images/menu_06.png',
-      'salted caramel': 'assets/images/menu_06.png',
-      'mico': 'assets/images/menu_06.png',
-      'lowco': 'assets/images/menu_03.png',
-      'matcha': 'assets/images/menu_05.png',
-      'taro': 'assets/images/menu_01.png',
-      'red velvet': 'assets/images/menu_02.png',
-      'choco': 'assets/images/menu_04.png',
-    };
-
-    return imageMap[name];
-  }
-
-  String _getFallbackImageByIndex(int index) {
-    const fallbackImages = [
-      'assets/images/menu_01.png',
-      'assets/images/menu_02.png',
-      'assets/images/menu_03.png',
-      'assets/images/menu_04.png',
-      'assets/images/menu_05.png',
-      'assets/images/menu_06.png',
-      'assets/images/menu_07.png',
-    ];
-
-    if (index < 0 || index >= fallbackImages.length) {
-      return fallbackImages.first;
-    }
-
-    return fallbackImages[index];
-  }
-
-  Widget _buildMenuImage({
-    required String menuName,
-    required int index,
-    double? width,
-    double? height,
-    double borderRadius = 16,
-  }) {
-    final assetPath =
-        _getMenuImageAssetByName(menuName) ?? _getFallbackImageByIndex(index);
-
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(borderRadius),
-      child: Image.asset(
-        assetPath,
-        width: width,
-        height: height,
-        fit: BoxFit.contain,
-        errorBuilder: (_, __, ___) {
-          return Container(
-            width: width,
-            height: height,
-            color: Colors.black.withAlpha(18),
-            alignment: Alignment.center,
-            child: const Icon(
-              Icons.local_cafe,
-              size: 34,
-              color: Colors.black,
-            ),
-          );
-        },
-      ),
-    );
-  }
-
-  Widget _buildMenuCard({
-    required Map<String, dynamic> item,
-    required int index,
-  }) {
-    final menu = item['menu'] as Map<String, dynamic>? ?? {};
-
-    final String menuId = menu['id']?.toString() ?? '';
-    final String name = menu['name']?.toString() ?? '-';
-    final int price = ((menu['price'] ?? 0) as num).toInt();
-    final int stock = ((item['stock'] ?? 0) as num).toInt();
-
-    final isSelected = selectedItem?['menu_id'] == menuId;
-    final isOutOfStock = stock <= 0;
-    final isLowStock = stock > 0 && stock < 5;
-
-    return GestureDetector(
-      onTap: isOutOfStock
-          ? null
-          : () {
-              setState(() {
-                selectedItem = item;
-                qty = 1;
-                payment = null;
-              });
-            },
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 180),
-        padding: const EdgeInsets.fromLTRB(10, 10, 10, 12),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(20),
-          border: isSelected
-              ? Border.all(color: Colors.black, width: 1.8)
-              : Border.all(color: Colors.grey.shade200, width: 1),
-          boxShadow: [
-            BoxShadow(
-              color: isSelected
-                  ? Colors.black.withAlpha(28)
-                  : Colors.black.withAlpha(8),
-              blurRadius: isSelected ? 12 : 8,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Align(
-              alignment: Alignment.topRight,
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 8,
-                  vertical: 4,
-                ),
-                decoration: BoxDecoration(
-                  color: isOutOfStock || isLowStock
-                      ? Colors.red
-                      : Colors.black87,
-                  borderRadius: BorderRadius.circular(999),
-                ),
-                child: Text(
-                  isOutOfStock ? "Habis" : "Stok $stock",
-                  style: const TextStyle(
-                    fontSize: 10,
-                    color: Colors.white,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(height: 6),
-            Expanded(
-              child: Center(
-                child: _buildMenuImage(
-                  menuName: name,
-                  index: index,
-                  width: 92,
-                  height: 92,
-                  borderRadius: 16,
-                ),
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              name,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w800,
-                color: Colors.black87,
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              _formatRupiah(price),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                color: Colors.black,
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
   }
 
   @override
   Widget build(BuildContext context) {
+    String formattedDate = DateFormat('EEEE, d MMMM yyyy', 'id_ID').format(DateTime.now());
+
     return Scaffold(
       backgroundColor: const Color(0xFFF5F5F5),
-      body: isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : Column(
-              children: [
-                Expanded(
-                  child: SingleChildScrollView(
-                    child: Column(
-                      children: [
-                        AppHeader(
-                          subtitle: todayText,
-                          child: Container(
-                            height: 50,
-                            padding: const EdgeInsets.symmetric(horizontal: 16),
-                            alignment: Alignment.center,
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(16),
-                            ),
-                            child: Row(
-                              children: [
-                                Expanded(
-                                  child: Text(
-                                    _selectedGerobakName,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(
-                                      fontSize: 15,
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.black87,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-                        Padding(
-                          padding: const EdgeInsets.all(12),
-                          child: items.isEmpty
-                              ? const EmptyState(
-                                  icon: Icons.inventory_2_outlined,
-                                  title: "Menu belum tersedia",
-                                  subtitle:
-                                      "Belum ada item yang bisa dijual untuk gerobak ini.",
-                                )
-                              : GridView.builder(
-                                  shrinkWrap: true,
-                                  physics:
-                                      const NeverScrollableScrollPhysics(),
-                                  itemCount: items.length,
-                                  gridDelegate:
-                                      const SliverGridDelegateWithFixedCrossAxisCount(
-                                    crossAxisCount: 2,
-                                    mainAxisSpacing: 14,
-                                    crossAxisSpacing: 14,
-                                    childAspectRatio: 0.72,
-                                  ),
-                                  itemBuilder: (_, i) {
-                                    return _buildMenuCard(
-                                      item: items[i],
-                                      index: i,
-                                    );
-                                  },
-                                ),
-                        ),
-                        const SizedBox(height: 100),
-                      ],
-                    ),
-                  ),
+      body: Column(
+        children: [
+          AppHeader(
+            subtitle: formattedDate,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<String>(
+                  value: selectedGerobakId,
+                  isExpanded: true,
+                  hint: const Text("Pilih Gerobak"),
+                  items: gerobakOptions.map((item) {
+                    return DropdownMenuItem<String>(
+                      value: item['id'].toString(),
+                      child: Text(
+                        item['nama_gerobak'] ?? '',
+                        style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.black87),
+                      ),
+                    );
+                  }).toList(),
+                  onChanged: (value) {
+                    if (value != null) {
+                      final selected = gerobakOptions.firstWhere((g) => g['id'].toString() == value);
+                      SelectedGerobakStore.setGerobak(GerobakItem.fromMap(selected));
+                    }
+                  },
                 ),
-                if (selectedItem != null) _buildBottomCheckout(),
-              ],
+              ),
             ),
+          ),
+          
+          Expanded(
+            child: isLoading
+                ? const Center(child: CircularProgressIndicator(color: Colors.orange))
+                : menuItems.isEmpty
+                    ? const EmptyState(
+                        icon: Icons.coffee_outlined,
+                        title: "Menu Kosong",
+                        subtitle: "Belum ada menu untuk gerobak ini.",
+                      )
+                    : RefreshIndicator(
+                        onRefresh: _loadMenuData,
+                        child: GridView.builder(
+                          padding: const EdgeInsets.all(16),
+                          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: 2,
+                            childAspectRatio: 0.75,
+                            crossAxisSpacing: 16,
+                            mainAxisSpacing: 16,
+                          ),
+                          itemCount: menuItems.length,
+                          itemBuilder: (context, index) {
+                            final item = menuItems[index];
+                            final menu = item['menu'];
+                            final int stok = item['stok_saat_ini'] ?? 0;
+                            return _buildMenuCard(menu, stok);
+                          },
+                        ),
+                      ),
+          ),
+        ],
+      ),
     );
   }
 
-  Widget _buildBottomCheckout() {
-    final selectedIndex = items.indexWhere(
-      (item) =>
-          item['menu_id']?.toString() == selectedItem?['menu_id']?.toString(),
-    );
-
+  Widget _buildMenuCard(Map<String, dynamic> menu, int stok) {
     return Container(
-      padding: const EdgeInsets.fromLTRB(16, 14, 16, 16),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: const BorderRadius.vertical(
-          top: Radius.circular(24),
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withAlpha(16),
-            blurRadius: 12,
-            offset: const Offset(0, -3),
-          ),
-        ],
-      ),
-      child: SafeArea(
-        top: false,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Row(
-              children: [
-                _buildMenuImage(
-                  menuName: _selectedName,
-                  index: selectedIndex < 0 ? 0 : selectedIndex,
-                  width: 56,
-                  height: 56,
-                  borderRadius: 14,
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        _selectedName,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 15,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        "Stock tersedia: $_selectedStock",
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.grey.shade600,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Text(
-                  _formatRupiah(_selectedPrice),
-                  style: const TextStyle(
-                    color: Colors.black,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 14,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 14),
-            Row(
-              children: [
-                Expanded(
-                  child: _buildSmallSection(
-                    title: "Qty",
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        _qtyButton(
-                          icon: Icons.remove,
-                          onTap: qty > 1 ? () => setState(() => qty--) : null,
-                        ),
-                        Text(
-                          "$qty",
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 18,
-                          ),
-                        ),
-                        _qtyButton(
-                          icon: Icons.add,
-                          onTap: qty < _selectedStock
-                              ? () => setState(() => qty++)
-                              : null,
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: _buildSmallSection(
-                    title: "Payment",
-                    child: Row(
-                      children: [
-                        Expanded(child: _paymentChip("Cash")),
-                        const SizedBox(width: 8),
-                        Expanded(child: _paymentChip("QRIS")),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 14),
-            Container(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 14,
-                vertical: 12,
-              ),
-              decoration: BoxDecoration(
-                color: Colors.black.withAlpha(12),
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Row(
-                children: [
-                  const Text(
-                    "Total",
-                    style: TextStyle(
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  const Spacer(),
-                  Text(
-                    _formatRupiah(_totalPrice),
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: Colors.black,
-                      fontSize: 16,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 14),
-            AppButton(
-              text: "Save Transaction",
-              onPressed: isSaving ? null : _recordSale,
-              isLoading: isSaving,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSmallSection({
-    required String title,
-    required Widget child,
-  }) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Colors.grey.shade50,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: Colors.grey.shade200,
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            title,
-            style: TextStyle(
-              fontSize: 12,
-              color: Colors.grey.shade600,
-            ),
-          ),
-          const SizedBox(height: 10),
-          child,
+        boxShadow: [
+          BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4))
         ],
       ),
-    );
-  }
-
-  Widget _qtyButton({
-    required IconData icon,
-    required VoidCallback? onTap,
-  }) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(10),
-      child: Container(
-        width: 30,
-        height: 30,
-        decoration: BoxDecoration(
-          color: onTap == null ? Colors.grey.shade200 : Colors.white,
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(
-            color: Colors.grey.shade300,
+      child: Stack(
+        children: [
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: ClipRRect(
+                  borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+                  child: Center(
+                    child: (menu['image_url'] != null && menu['image_url'].toString().isNotEmpty)
+                        ? Image.network(
+                            menu['image_url'], 
+                            fit: BoxFit.cover,
+                            width: double.infinity,
+                            errorBuilder: (context, error, stackTrace) => const Icon(Icons.broken_image, color: Colors.grey),
+                          )
+                        : const Icon(Icons.image_not_supported, color: Colors.grey, size: 50),
+                  ),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      menu['name'] ?? 'Menu', 
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14), 
+                      maxLines: 1, 
+                      overflow: TextOverflow.ellipsis
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      CurrencyFormatter.format(menu['price'] ?? 0), 
+                      style: const TextStyle(color: Colors.orange, fontWeight: FontWeight.bold)
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
-        ),
-        child: Icon(
-          icon,
-          size: 16,
-          color: onTap == null ? Colors.grey : Colors.black87,
-        ),
-      ),
-    );
-  }
-
-  Widget _paymentChip(String method) {
-    final isSelected = payment == method;
-
-    return GestureDetector(
-      onTap: () => setState(() => payment = method),
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 9),
-        decoration: BoxDecoration(
-          color: isSelected ? Colors.black : Colors.white,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: isSelected ? Colors.black : Colors.grey.shade300,
-          ),
-        ),
-        child: Center(
-          child: Text(
-            method,
-            style: TextStyle(
-              fontSize: 12,
-              color: isSelected ? Colors.white : Colors.black87,
-              fontWeight: FontWeight.w600,
+          Positioned(
+            top: 10,
+            right: 10,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: stok <= 0 ? Colors.red : Colors.black87,
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Text(
+                stok <= 0 ? "Habis" : "Stok $stok", 
+                style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)
+              ),
             ),
           ),
-        ),
+        ],
       ),
     );
   }

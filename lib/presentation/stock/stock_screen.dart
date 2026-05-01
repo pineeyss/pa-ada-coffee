@@ -627,9 +627,6 @@ class _StockScreenState extends State<StockScreen> {
     final price = TextEditingController(
       text: (menu['price'] ?? 0).toString(),
     );
-    final emoji = TextEditingController(
-      text: (menu['emoji'] ?? '☕').toString(),
-    );
 
     String category = (menu['category'] ?? 'Coffee').toString();
 
@@ -703,7 +700,6 @@ class _StockScreenState extends State<StockScreen> {
                     keyboardType: TextInputType.number,
                   ),
                   const SizedBox(height: 12),
-                  input("Emoji Icon", emoji),
                   const SizedBox(height: 16),
                   Row(
                     children: [
@@ -738,9 +734,6 @@ class _StockScreenState extends State<StockScreen> {
                                 'name': name.text.trim(),
                                 'category': category,
                                 'price': int.tryParse(price.text.trim()) ?? 0,
-                                'emoji': emoji.text.trim().isEmpty
-                                    ? '☕'
-                                    : emoji.text.trim(),
                               }).eq('id', menu['id']);
 
                               if (!mounted) return;
