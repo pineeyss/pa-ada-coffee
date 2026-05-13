@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../data/services/stock_service.dart';
-import '../../data/services/menu_service.dart';
 import '../widgets/header.dart';
 import '../../utils/dialog_helper.dart';
 import '../../core/supabase/selected_gerobak_store.dart';
@@ -16,7 +15,6 @@ class StockScreen extends StatefulWidget {
 class _StockScreenState extends State<StockScreen> {
   final SupabaseClient supabase = Supabase.instance.client;
   final StockService _stockService = StockService();
-  final MenuService _menuService = MenuService();
 
   List<Map<String, dynamic>> data = [];
   List<Map<String, dynamic>> gerobak = [];
@@ -34,11 +32,9 @@ class _StockScreenState extends State<StockScreen> {
 
   String get _selectedGerobakName {
     if (gerobak.isEmpty || selectedGerobak == null) return '-';
-
     final found = gerobak.where(
       (item) => item['id']?.toString() == selectedGerobak,
     );
-
     if (found.isEmpty) return '-';
     return found.first['nama_gerobak']?.toString() ?? '-';
   }
@@ -74,44 +70,9 @@ class _StockScreenState extends State<StockScreen> {
     return '${days[now.weekday - 1]}, ${now.day} ${months[now.month - 1]} ${now.year}';
   }
 
-  String _normalizeName(String value) {
-    return value.toLowerCase().trim().replaceAll(RegExp(r'[^a-z0-9]+'), ' ');
-  }
-
-  List<Map<String, dynamic>> _fallbackMasterMenus() {
-    return [
-      {'id': 'fallback_americano', 'name': 'Americano', 'price': 13000, 'category': 'Coffee', 'emoji': '☕'},
-      {'id': 'fallback_pandawa', 'name': 'Pandawa', 'price': 13000, 'category': 'Coffee', 'emoji': '☕'},
-      {'id': 'fallback_butterscotch', 'name': 'Butterscotch', 'price': 13000, 'category': 'Coffee', 'emoji': '☕'},
-      {'id': 'fallback_caramel', 'name': 'Caramel', 'price': 13000, 'category': 'Coffee', 'emoji': '☕'},
-      {'id': 'fallback_hazelnut', 'name': 'Hazelnut', 'price': 13000, 'category': 'Coffee', 'emoji': '☕'},
-      {'id': 'fallback_salted_caramel', 'name': 'Salted Caramel', 'price': 13000, 'category': 'Coffee', 'emoji': '☕'},
-      {'id': 'fallback_mico', 'name': 'Mico', 'price': 13000, 'category': 'Coffee', 'emoji': '☕'},
-      {'id': 'fallback_lowco', 'name': 'Lowco', 'price': 13000, 'category': 'Coffee', 'emoji': '☕'},
-      {'id': 'fallback_matcha', 'name': 'Matcha', 'price': 13000, 'category': 'Non Coffee', 'emoji': '🍵'},
-      {'id': 'fallback_taro', 'name': 'Taro', 'price': 13000, 'category': 'Non Coffee', 'emoji': '🧋'},
-      {'id': 'fallback_red_velvet', 'name': 'Red Velvet', 'price': 13000, 'category': 'Non Coffee', 'emoji': '🥤'},
-      {'id': 'fallback_choco', 'name': 'Choco', 'price': 12000, 'category': 'Non Coffee', 'emoji': '🍫'},
-    ];
-  }
-
-  void _handleSelectedGerobakChanged() {
-    final newId = SelectedGerobakStore.selectedGerobakId;
-
-    if (newId == null || newId == selectedGerobak) return;
-    if (!mounted) return;
-
-    setState(() {
-      selectedGerobak = newId;
-    });
-
-    load();
-  }
-
   List<Map<String, dynamic>> get filteredData {
     return data.where((item) {
       final menu = item['menu'] as Map<String, dynamic>? ?? {};
-
       final name = (menu['name'] ?? "").toString().toLowerCase();
       final category = (menu['category'] ?? "").toString();
 
@@ -123,36 +84,53 @@ class _StockScreenState extends State<StockScreen> {
     }).toList();
   }
 
+  void _handleSelectedGerobakChanged() {
+    final newId = SelectedGerobakStore.selectedGerobakId;
+
+    if (newId == null || newId == selectedGerobak) return;
+    if (!mounted) return;
+
+    setState(() => selectedGerobak = newId);
+    load();
+  }
+
+  void _handleMenuChanged() {
+    if (!mounted) return;
+    load();
+  }
+
   @override
   void initState() {
     super.initState();
 
-    SelectedGerobakStore.selectedGerobak.addListener(
-      _handleSelectedGerobakChanged,
-    );
+    SelectedGerobakStore.selectedGerobak
+        .addListener(_handleSelectedGerobakChanged);
+
+    SelectedGerobakStore.menuRefreshToken.addListener(_handleMenuChanged);
 
     init();
   }
 
   @override
   void dispose() {
-    SelectedGerobakStore.selectedGerobak.removeListener(
-      _handleSelectedGerobakChanged,
-    );
+    SelectedGerobakStore.selectedGerobak
+        .removeListener(_handleSelectedGerobakChanged);
+
+    SelectedGerobakStore.menuRefreshToken.removeListener(_handleMenuChanged);
+
     super.dispose();
   }
 
   Future<void> init() async {
     try {
-      if (mounted) {
-        setState(() => isLoading = true);
-      }
+      if (mounted) setState(() => isLoading = true);
 
       final role = await _stockService.getCurrentUserRole();
       final gerobakOptions = await _stockService.getGerobakOptionsByRole();
 
       if (gerobakOptions.isEmpty) {
         if (!mounted) return;
+
         setState(() {
           _role = role;
           gerobak = [];
@@ -160,18 +138,18 @@ class _StockScreenState extends State<StockScreen> {
           data = [];
           isLoading = false;
         });
+
         return;
       }
 
       final storeId = SelectedGerobakStore.selectedGerobakId;
 
-      final selected = gerobakOptions.any(
-        (item) => item['id']?.toString() == storeId,
-      )
-          ? gerobakOptions.firstWhere(
-              (item) => item['id']?.toString() == storeId,
-            )
-          : gerobakOptions.first;
+      final selected =
+          gerobakOptions.any((item) => item['id']?.toString() == storeId)
+              ? gerobakOptions.firstWhere(
+                  (item) => item['id']?.toString() == storeId,
+                )
+              : gerobakOptions.first;
 
       selectedGerobak = selected['id']?.toString();
 
@@ -182,6 +160,7 @@ class _StockScreenState extends State<StockScreen> {
       }
 
       if (!mounted) return;
+
       setState(() {
         _role = role;
         gerobak = gerobakOptions;
@@ -190,7 +169,9 @@ class _StockScreenState extends State<StockScreen> {
       await load();
     } catch (e) {
       if (!mounted) return;
+
       setState(() => isLoading = false);
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text("Gagal init stock: $e")),
       );
@@ -200,131 +181,75 @@ class _StockScreenState extends State<StockScreen> {
   Future<void> load() async {
     if (selectedGerobak == null) {
       if (!mounted) return;
+
       setState(() {
         data = [];
         isLoading = false;
       });
+
       return;
     }
 
     try {
-      if (mounted) {
-        setState(() => isLoading = true);
-      }
+      if (mounted) setState(() => isLoading = true);
 
-      final stockData = await _stockService.getStocksByGerobak(selectedGerobak!);
+      final response = await supabase
+          .from('stok_gerobak')
+          .select('''
+            id,
+            gerobak_id,
+            menu_id,
+            stok_awal,
+            stok_saat_ini,
+            created_at,
+            menu:menu_id (
+              id,
+              name,
+              price,
+              category,
+              emoji,
+              image_url,
+              created_at
+            )
+          ''')
+          .eq('gerobak_id', selectedGerobak!)
+          .order('created_at', ascending: false);
 
-      List<dynamic> serviceMenus = [];
-      try {
-        serviceMenus = await _menuService.getMenus();
-      } catch (_) {
-        serviceMenus = [];
-      }
+      final stockData = List<Map<String, dynamic>>.from(response);
 
-      final fallbackMenus = _fallbackMasterMenus();
+      final validData = stockData
+          .where((item) {
+            final menu = item['menu'];
+            return menu != null && (menu['name'] ?? '').toString().isNotEmpty;
+          })
+          .map((item) {
+            return {
+              ...item,
+              'stock': ((item['stok_saat_ini'] ?? 0) as num).toInt(),
+            };
+          })
+          .toList();
 
-      final Map<String, Map<String, dynamic>> mergedMasterByName = {};
-
-      for (final menu in fallbackMenus) {
-        final normalized = _normalizeName(menu['name'].toString());
-        mergedMasterByName[normalized] = {
-          'id': menu['id'],
-          'name': menu['name'],
-          'price': menu['price'],
-          'category': menu['category'],
-          'emoji': menu['emoji'],
-          'created_at': null,
-        };
-      }
-
-      for (final menu in serviceMenus) {
-        final name = (menu.name ?? '').toString();
-        if (name.isEmpty) continue;
-
-        final normalized = _normalizeName(name);
-        mergedMasterByName[normalized] = {
-          'id': menu.id,
-          'name': menu.name,
-          'price': menu.price ?? 0,
-          'category': menu.category ?? 'Coffee',
-          'emoji': menu.emoji,
-          'created_at': menu.createdAt?.toIso8601String(),
-        };
-      }
-
-      for (final stock in stockData) {
-        final stockMenu = stock['menu'] as Map<String, dynamic>? ?? {};
-        final stockMenuName = stockMenu['name']?.toString() ?? '';
-        if (stockMenuName.isEmpty) continue;
-
-        final normalized = _normalizeName(stockMenuName);
-
-        mergedMasterByName.putIfAbsent(normalized, () {
-          return {
-            'id': stockMenu['id'],
-            'name': stockMenu['name'],
-            'price': stockMenu['price'] ?? 0,
-            'category': stockMenu['category'] ?? 'Coffee',
-            'emoji': stockMenu['emoji'],
-            'created_at': stockMenu['created_at'],
-          };
-        });
-      }
-
-      final Map<String, Map<String, dynamic>> stockByName = {};
-      for (final stock in stockData) {
-        final stockMenu = stock['menu'] as Map<String, dynamic>? ?? {};
-        final stockMenuName = stockMenu['name']?.toString() ?? '';
-        if (stockMenuName.isEmpty) continue;
-
-        stockByName[_normalizeName(stockMenuName)] = stock;
-      }
-
-      final List<Map<String, dynamic>> finalItems =
-          mergedMasterByName.entries.map((entry) {
-        final master = entry.value;
-        final stockItem = stockByName[entry.key];
-        final stockMenu = stockItem?['menu'] as Map<String, dynamic>? ?? {};
-
-        final dynamic finalMenuId = stockMenu['id'] ?? master['id'];
-        final int finalPrice =
-            ((stockMenu['price'] ?? master['price'] ?? 0) as num).toInt();
-
-        return {
-          'id': stockItem?['id'],
-          'gerobak_id': selectedGerobak,
-          'menu_id': finalMenuId?.toString(),
-          'stok_awal': stockItem?['stok_awal'] ?? 0,
-          'stok_saat_ini': stockItem?['stok_saat_ini'] ?? 0,
-          'created_at': stockItem?['created_at'],
-          'stock': ((stockItem?['stok_saat_ini'] ?? 0) as num).toInt(),
-          'menu': {
-            'id': finalMenuId,
-            'name': stockMenu['name'] ?? master['name'],
-            'price': finalPrice,
-            'category': stockMenu['category'] ?? master['category'],
-            'emoji': stockMenu['emoji'] ?? master['emoji'],
-            'created_at': stockMenu['created_at'] ?? master['created_at'],
-          },
-        };
-      }).toList();
-
-      finalItems.sort((a, b) {
+      validData.sort((a, b) {
         final nameA =
             ((a['menu'] as Map<String, dynamic>?)?['name'] ?? '').toString();
         final nameB =
             ((b['menu'] as Map<String, dynamic>?)?['name'] ?? '').toString();
+
         return nameA.compareTo(nameB);
       });
 
       if (!mounted) return;
+
       setState(() {
-        data = finalItems;
+        data = validData;
         isLoading = false;
       });
     } catch (e) {
       if (!mounted) return;
+
       setState(() => isLoading = false);
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text("Gagal load stock: $e")),
       );
@@ -342,26 +267,31 @@ class _StockScreenState extends State<StockScreen> {
 
     try {
       final menuId = menu['id']?.toString();
-      if (menuId == null || menuId.isEmpty || menuId.startsWith('fallback_')) {
+
+      if (menuId == null || menuId.isEmpty) {
         if (!mounted) return;
+
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text("Menu ini belum tersimpan di database")),
         );
+
         return;
       }
 
-      await supabase.from('stok_gerobak').delete().eq('menu_id', menuId);
       await supabase.from('detail_transaksi').delete().eq('menu_id', menuId);
       await supabase.from('menu').delete().eq('id', menuId);
 
       await load();
+      SelectedGerobakStore.notifyMenuChanged();
 
       if (!mounted) return;
+
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Menu berhasil dihapus")),
       );
     } catch (e) {
       if (!mounted) return;
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text("Gagal hapus menu: $e")),
       );
@@ -370,7 +300,7 @@ class _StockScreenState extends State<StockScreen> {
 
   Widget input(
     String label,
-    TextEditingController c, {
+    TextEditingController controller, {
     String hint = "",
     TextInputType keyboardType = TextInputType.text,
   }) {
@@ -386,7 +316,7 @@ class _StockScreenState extends State<StockScreen> {
         ),
         const SizedBox(height: 6),
         TextField(
-          controller: c,
+          controller: controller,
           keyboardType: keyboardType,
           decoration: InputDecoration(
             hintText: hint,
@@ -408,8 +338,8 @@ class _StockScreenState extends State<StockScreen> {
   void addModal() {
     final name = TextEditingController();
     final price = TextEditingController();
-    final stock = TextEditingController(text: "0");
-    final emoji = TextEditingController(text: "☕");
+    final stock = TextEditingController(text: "10");
+    final imageUrl = TextEditingController();
 
     String category = "Coffee";
 
@@ -424,7 +354,9 @@ class _StockScreenState extends State<StockScreen> {
           ),
           decoration: const BoxDecoration(
             color: Colors.white,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+            borderRadius: BorderRadius.vertical(
+              top: Radius.circular(24),
+            ),
           ),
           child: Padding(
             padding: const EdgeInsets.all(16),
@@ -439,9 +371,17 @@ class _StockScreenState extends State<StockScreen> {
                       fontSize: 16,
                     ),
                   ),
+
                   const SizedBox(height: 16),
-                  input("Item Name", name, hint: "e.g., Americano"),
+
+                  input(
+                    "Item Name",
+                    name,
+                    hint: "e.g., Americano",
+                  ),
+
                   const SizedBox(height: 12),
+
                   const Align(
                     alignment: Alignment.centerLeft,
                     child: Text(
@@ -452,7 +392,9 @@ class _StockScreenState extends State<StockScreen> {
                       ),
                     ),
                   ),
+
                   const SizedBox(height: 6),
+
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 12),
                     decoration: BoxDecoration(
@@ -482,12 +424,15 @@ class _StockScreenState extends State<StockScreen> {
                         ),
                       ],
                       onChanged: (v) {
-                        if (v == null) return;
-                        setModal(() => category = v);
+                        if (v != null) {
+                          setModal(() => category = v);
+                        }
                       },
                     ),
                   ),
+
                   const SizedBox(height: 12),
+
                   Row(
                     children: [
                       Expanded(
@@ -507,9 +452,18 @@ class _StockScreenState extends State<StockScreen> {
                       ),
                     ],
                   ),
+
                   const SizedBox(height: 12),
-                  input("Emoji Icon", emoji),
+
+                  input(
+                    "Image URL",
+                    imageUrl,
+                    hint: "https://example.com/image.jpg",
+                    keyboardType: TextInputType.url,
+                  ),
+
                   const SizedBox(height: 16),
+
                   Row(
                     children: [
                       Expanded(
@@ -522,7 +476,9 @@ class _StockScreenState extends State<StockScreen> {
                           child: const Text("Cancel"),
                         ),
                       ),
+
                       const SizedBox(width: 10),
+
                       Expanded(
                         child: ElevatedButton(
                           style: ElevatedButton.styleFrom(
@@ -531,7 +487,6 @@ class _StockScreenState extends State<StockScreen> {
                           ),
                           onPressed: () async {
                             if (name.text.trim().isEmpty) {
-                              if (!mounted) return;
                               ScaffoldMessenger.of(context).showSnackBar(
                                 const SnackBar(
                                   content: Text("Nama menu wajib diisi"),
@@ -551,24 +506,26 @@ class _StockScreenState extends State<StockScreen> {
                             try {
                               final int parsedPrice =
                                   int.tryParse(price.text.trim()) ?? 0;
+
                               final int parsedStock =
-                                  int.tryParse(stock.text.trim()) ?? 0;
+                                  int.tryParse(stock.text.trim()) ?? 10;
 
-                              final insertedMenu = await supabase
-                                  .from('menu')
-                                  .insert({
-                                    'name': name.text.trim(),
-                                    'category': category,
-                                    'price': parsedPrice,
-                                    'stock': parsedStock,
-                                    'emoji': emoji.text.trim().isEmpty
-                                        ? '☕'
-                                        : emoji.text.trim(),
-                                  })
-                                  .select('id')
-                                  .single();
+                              final String imageUrlValue =
+                                  imageUrl.text.trim();
 
-                              final newMenuId = insertedMenu['id']?.toString();
+                              final insertedMenu =
+                                  await supabase.from('menu').insert({
+                                'name': name.text.trim(),
+                                'category': category,
+                                'price': parsedPrice,
+                                'stock': parsedStock,
+                                'image_url': imageUrlValue.isEmpty
+                                    ? null
+                                    : imageUrlValue,
+                              }).select('id').single();
+
+                              final newMenuId =
+                                  insertedMenu['id']?.toString();
 
                               if (newMenuId != null &&
                                   newMenuId.isNotEmpty &&
@@ -582,10 +539,13 @@ class _StockScreenState extends State<StockScreen> {
                               }
 
                               if (!mounted) return;
+
                               Navigator.pop(context);
+
                               await load();
 
                               if (!mounted) return;
+
                               ScaffoldMessenger.of(context).showSnackBar(
                                 const SnackBar(
                                   content: Text("Menu berhasil ditambahkan"),
@@ -593,6 +553,7 @@ class _StockScreenState extends State<StockScreen> {
                               );
                             } catch (e) {
                               if (!mounted) return;
+
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(
                                   content: Text("Gagal tambah menu: $e"),
@@ -616,16 +577,24 @@ class _StockScreenState extends State<StockScreen> {
 
   void editModal(Map<String, dynamic> menu) {
     final menuId = menu['id']?.toString() ?? '';
-    if (menuId.startsWith('fallback_')) {
+
+    if (menuId.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Menu ini belum tersimpan di database')),
       );
       return;
     }
 
-    final name = TextEditingController(text: menu['name']?.toString() ?? '');
+    final name = TextEditingController(
+      text: menu['name']?.toString() ?? '',
+    );
+
     final price = TextEditingController(
       text: (menu['price'] ?? 0).toString(),
+    );
+
+    final imageUrl = TextEditingController(
+      text: menu['image_url']?.toString() ?? '',
     );
 
     String category = (menu['category'] ?? 'Coffee').toString();
@@ -641,7 +610,9 @@ class _StockScreenState extends State<StockScreen> {
           ),
           decoration: const BoxDecoration(
             color: Colors.white,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+            borderRadius: BorderRadius.vertical(
+              top: Radius.circular(24),
+            ),
           ),
           child: Padding(
             padding: const EdgeInsets.all(16),
@@ -656,9 +627,13 @@ class _StockScreenState extends State<StockScreen> {
                       fontSize: 16,
                     ),
                   ),
+
                   const SizedBox(height: 16),
+
                   input("Item Name", name),
+
                   const SizedBox(height: 12),
+
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 12),
                     decoration: BoxDecoration(
@@ -688,19 +663,32 @@ class _StockScreenState extends State<StockScreen> {
                         ),
                       ],
                       onChanged: (v) {
-                        if (v == null) return;
-                        setModal(() => category = v);
+                        if (v != null) {
+                          setModal(() => category = v);
+                        }
                       },
                     ),
                   ),
+
                   const SizedBox(height: 12),
+
                   input(
                     "Price (Rp)",
                     price,
                     keyboardType: TextInputType.number,
                   ),
+
                   const SizedBox(height: 12),
+
+                  input(
+                    "Image URL",
+                    imageUrl,
+                    hint: "https://example.com/image.jpg",
+                    keyboardType: TextInputType.url,
+                  ),
+
                   const SizedBox(height: 16),
+
                   Row(
                     children: [
                       Expanded(
@@ -713,7 +701,9 @@ class _StockScreenState extends State<StockScreen> {
                           child: const Text("Cancel"),
                         ),
                       ),
+
                       const SizedBox(width: 10),
+
                       Expanded(
                         child: ElevatedButton(
                           style: ElevatedButton.styleFrom(
@@ -730,17 +720,25 @@ class _StockScreenState extends State<StockScreen> {
                             if (!ok) return;
 
                             try {
+                              final imageUrlValue = imageUrl.text.trim();
+
                               await supabase.from('menu').update({
                                 'name': name.text.trim(),
                                 'category': category,
                                 'price': int.tryParse(price.text.trim()) ?? 0,
+                                'image_url': imageUrlValue.isEmpty
+                                    ? null
+                                    : imageUrlValue,
                               }).eq('id', menu['id']);
 
                               if (!mounted) return;
+
                               Navigator.pop(context);
+
                               await load();
 
                               if (!mounted) return;
+
                               ScaffoldMessenger.of(context).showSnackBar(
                                 const SnackBar(
                                   content: Text("Menu berhasil diupdate"),
@@ -748,6 +746,7 @@ class _StockScreenState extends State<StockScreen> {
                               );
                             } catch (e) {
                               if (!mounted) return;
+
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(
                                   content: Text("Gagal update menu: $e"),
@@ -791,10 +790,12 @@ class _StockScreenState extends State<StockScreen> {
         child: const Icon(Icons.add),
       ),
       body: isLoading
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(
+              child: CircularProgressIndicator(),
+            )
           : Column(
               children: [
-                 AppHeader(
+                AppHeader(
                   subtitle: todayText,
                   child: Container(
                     padding: const EdgeInsets.symmetric(
@@ -821,6 +822,7 @@ class _StockScreenState extends State<StockScreen> {
                     ),
                   ),
                 ),
+
                 Expanded(
                   child: RefreshIndicator(
                     onRefresh: load,
@@ -834,15 +836,22 @@ class _StockScreenState extends State<StockScreen> {
                             borderRadius: BorderRadius.circular(14),
                           ),
                           child: TextField(
-                            onChanged: (v) => setState(() => searchQuery = v),
+                            onChanged: (v) {
+                              setState(() => searchQuery = v);
+                            },
                             decoration: const InputDecoration(
-                              icon: Icon(Icons.search, color: Colors.black54),
+                              icon: Icon(
+                                Icons.search,
+                                color: Colors.black54,
+                              ),
                               hintText: "Search menu...",
                               border: InputBorder.none,
                             ),
                           ),
                         ),
+
                         const SizedBox(height: 12),
+
                         SizedBox(
                           height: 40,
                           child: ListView.separated(
@@ -855,18 +864,17 @@ class _StockScreenState extends State<StockScreen> {
                               final selected = c == selectedCategory;
 
                               return GestureDetector(
-                                onTap: () => setState(() {
-                                  selectedCategory = c;
-                                }),
+                                onTap: () {
+                                  setState(() => selectedCategory = c);
+                                },
                                 child: Container(
                                   padding: const EdgeInsets.symmetric(
                                     horizontal: 14,
                                     vertical: 10,
                                   ),
                                   decoration: BoxDecoration(
-                                    color: selected
-                                        ? Colors.black
-                                        : Colors.white,
+                                    color:
+                                        selected ? Colors.black : Colors.white,
                                     borderRadius: BorderRadius.circular(12),
                                     border: Border.all(
                                       color: selected
@@ -889,7 +897,9 @@ class _StockScreenState extends State<StockScreen> {
                             },
                           ),
                         ),
+
                         const SizedBox(height: 16),
+
                         if (filteredData.isEmpty)
                           Container(
                             padding: const EdgeInsets.all(24),
@@ -908,7 +918,9 @@ class _StockScreenState extends State<StockScreen> {
                           ...filteredData.map((item) {
                             final menu =
                                 item['menu'] as Map<String, dynamic>? ?? {};
-                            final stock = ((item['stock'] ?? 0) as num).toInt();
+
+                            final stock =
+                                ((item['stock'] ?? 0) as num).toInt();
 
                             return Container(
                               margin: const EdgeInsets.only(bottom: 12),
@@ -938,7 +950,9 @@ class _StockScreenState extends State<StockScreen> {
                                       color: Colors.black,
                                     ),
                                   ),
+
                                   const SizedBox(width: 12),
+
                                   Expanded(
                                     child: Column(
                                       crossAxisAlignment:
@@ -952,7 +966,9 @@ class _StockScreenState extends State<StockScreen> {
                                             color: Colors.black87,
                                           ),
                                         ),
+
                                         const SizedBox(height: 4),
+
                                         Text(
                                           menu['category']?.toString() ?? '-',
                                           style: const TextStyle(
@@ -960,7 +976,9 @@ class _StockScreenState extends State<StockScreen> {
                                             color: Colors.black54,
                                           ),
                                         ),
+
                                         const SizedBox(height: 4),
+
                                         Text(
                                           "Rp ${(menu['price'] ?? 0)}",
                                           style: const TextStyle(
@@ -972,7 +990,9 @@ class _StockScreenState extends State<StockScreen> {
                                       ],
                                     ),
                                   ),
+
                                   const SizedBox(width: 8),
+
                                   Column(
                                     crossAxisAlignment: CrossAxisAlignment.end,
                                     children: [
@@ -982,8 +1002,8 @@ class _StockScreenState extends State<StockScreen> {
                                           vertical: 6,
                                         ),
                                         decoration: BoxDecoration(
-                                          color: _stockColor(stock)
-                                              .withAlpha(14),
+                                          color:
+                                              _stockColor(stock).withAlpha(14),
                                           borderRadius:
                                               BorderRadius.circular(999),
                                         ),
@@ -996,7 +1016,9 @@ class _StockScreenState extends State<StockScreen> {
                                           ),
                                         ),
                                       ),
+
                                       const SizedBox(height: 8),
+
                                       Row(
                                         mainAxisSize: MainAxisSize.min,
                                         children: [

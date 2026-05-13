@@ -20,18 +20,19 @@ class TransaksiService {
   }
 
   Future<List<Map<String, dynamic>>> getPendingOrders() async {
-  final response = await supabase
-      .from('transaksi')
-      .select()
-      .order('id', ascending: false);
+    final response = await supabase
+        .from('transaksi')
+        .select()
+        .eq('status', 'pending')
+        .order('id', ascending: false);
 
-  return List<Map<String, dynamic>>.from(response);
-}
+    return List<Map<String, dynamic>>.from(response);
+  }
 
-Future<void> updateStatus(String id, String status) async {
-  await supabase
-      .from('transaksi')
-      .update({'status': status})
-      .eq('id', id);
-}
+  Future<void> updateStatus(String id, String status) async {
+    await supabase
+        .from('transaksi')
+        .update({'status': status})
+        .eq('id', id);
+  }
 }

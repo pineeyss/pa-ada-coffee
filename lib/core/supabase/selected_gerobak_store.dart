@@ -25,6 +25,11 @@ class SelectedGerobakStore {
       ValueNotifier<GerobakItem?>(null);
 
   static final ValueNotifier<int> salesRefreshToken = ValueNotifier<int>(0);
+  static final ValueNotifier<int> menuRefreshToken = ValueNotifier<int>(0);
+
+  static void notifyMenuChanged() {
+    menuRefreshToken.value = menuRefreshToken.value + 1;
+  }
 
   static void setGerobak(GerobakItem gerobak) {
     selectedGerobak.value = gerobak;

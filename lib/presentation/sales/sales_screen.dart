@@ -15,8 +15,10 @@ class SalesScreen extends StatefulWidget {
 
 class _SalesScreenState extends State<SalesScreen> {
   final SupabaseClient supabase = Supabase.instance.client;
+
   List<Map<String, dynamic>> menuItems = [];
   List<Map<String, dynamic>> gerobakOptions = [];
+
   bool isLoading = true;
   String? selectedGerobakId;
 
@@ -36,29 +38,55 @@ class _SalesScreenState extends State<SalesScreen> {
   Future<void> _initializeData() async {
     try {
       final response = await supabase.from('gerobak').select('id, nama_gerobak');
+
       if (mounted) {
         setState(() {
           gerobakOptions = List<Map<String, dynamic>>.from(response);
-          selectedGerobakId = SelectedGerobakStore.selectedGerobakId ?? 
-                             (gerobakOptions.isNotEmpty ? gerobakOptions[0]['id'].toString() : null);
+          selectedGerobakId = SelectedGerobakStore.selectedGerobakId ??
+              (gerobakOptions.isNotEmpty ? gerobakOptions[0]['id'].toString() : null);
         });
-        _loadMenuData();
+
+        await _resetStockDefault10();
+        await _loadMenuData();
       }
     } catch (e) {
       debugPrint("Error Init: $e");
+      if (mounted) {
+        setState(() => isLoading = false);
+      }
     }
   }
 
-  void _handleSelectedGerobakChanged() {
+  void _handleSelectedGerobakChanged() async {
     if (!mounted) return;
-    setState(() => selectedGerobakId = SelectedGerobakStore.selectedGerobakId);
-    _loadMenuData();
+
+    setState(() {
+      selectedGerobakId = SelectedGerobakStore.selectedGerobakId;
+    });
+
+    await _resetStockDefault10();
+    await _loadMenuData();
+  }
+
+  Future<void> _resetStockDefault10() async {
+    if (selectedGerobakId == null) return;
+
+    try {
+      await supabase
+          .from('stok_gerobak')
+          .update({'stok_saat_ini': 10})
+          .eq('gerobak_id', selectedGerobakId!);
+    } catch (e) {
+      debugPrint("Gagal reset stok default 10: $e");
+    }
   }
 
   Future<void> _loadMenuData() async {
     if (selectedGerobakId == null) return;
+
     try {
       if (mounted) setState(() => isLoading = true);
+
       final data = await supabase
           .from('stok_gerobak')
           .select('stok_saat_ini, menu(id, name, price, image_url)')
@@ -71,36 +99,37 @@ class _SalesScreenState extends State<SalesScreen> {
         });
       }
     } catch (e) {
+      debugPrint("Error Load Menu: $e");
       if (mounted) setState(() => isLoading = false);
     }
   }
 
-  // --- FUNGSI PROSES TRANSAKSI (FINAL FIX) ---
-  Future<void> _processOrder(Map<String, dynamic> menu, int quantity, String payment, int currentStok) async {
+  Future<void> _processOrder(
+    Map<String, dynamic> menu,
+    int quantity,
+    String payment,
+    int currentStok,
+  ) async {
     try {
       if (mounted) setState(() => isLoading = true);
 
-      // 1. Insert ke tabel 'transaksi' (Master)
       final transaksiResponse = await supabase.from('transaksi').insert({
         'gerobak_id': selectedGerobakId,
         'total_harga': menu['price'] * quantity,
-        'status': 'pending', 
+        'status': 'pending',
         'metode_pembayaran': payment,
         'tanggal': DateTime.now().toIso8601String(),
       }).select().single();
 
       final String transaksiId = transaksiResponse['id'];
 
-      // 2. Insert ke tabel 'detail_transaksi'
-      // Kunci perbaikan: Menghapus 'subtotal' karena itu generated column di DB kamu
       await supabase.from('detail_transaksi').insert({
         'transaksi_id': transaksiId,
         'menu_id': menu['id'],
-        'qty': quantity,          
-        'harga': menu['price'],    
+        'qty': quantity,
+        'harga': menu['price'],
       });
 
-      // 3. Update stok di 'stok_gerobak'
       await supabase
           .from('stok_gerobak')
           .update({'stok_saat_ini': currentStok - quantity})
@@ -113,16 +142,20 @@ class _SalesScreenState extends State<SalesScreen> {
           backgroundColor: Colors.green,
         ),
       );
-      
-      _loadMenuData(); 
+
+      SelectedGerobakStore.notifySalesChanged();
+
+      await _loadMenuData();
     } catch (e) {
       debugPrint("Error Detail: $e");
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text("Gagal: $e"),
           backgroundColor: Colors.red,
         ),
       );
+
       if (mounted) setState(() => isLoading = false);
     }
   }
@@ -143,21 +176,32 @@ class _SalesScreenState extends State<SalesScreen> {
             borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
           ),
           padding: EdgeInsets.only(
-            top: 24, left: 24, right: 24,
+            top: 24,
+            left: 24,
+            right: 24,
             bottom: MediaQuery.of(context).viewInsets.bottom + 24,
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Center(child: Text("Detail Transaksi", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold))),
+              const Center(
+                child: Text(
+                  "Detail Transaksi",
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+              ),
               const SizedBox(height: 24),
               const Text("Nama Menu", style: TextStyle(fontWeight: FontWeight.bold)),
               const SizedBox(height: 8),
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(color: const Color(0xFFF5F5F5), borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.black12)),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF5F5F5),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.black12),
+                ),
                 child: Text(menu['name'], style: const TextStyle(color: Colors.black87)),
               ),
               const SizedBox(height: 16),
@@ -165,18 +209,29 @@ class _SalesScreenState extends State<SalesScreen> {
               const SizedBox(height: 8),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
-                decoration: BoxDecoration(color: const Color(0xFFF5F5F5), borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.black12)),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF5F5F5),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.black12),
+                ),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     IconButton(
-                      onPressed: quantity > 1 ? () => setSheetState(() => quantity--) : null, 
-                      icon: const Icon(Icons.remove_circle_outline)
+                      onPressed: quantity > 1
+                          ? () => setSheetState(() => quantity--)
+                          : null,
+                      icon: const Icon(Icons.remove_circle_outline),
                     ),
-                    Text("$quantity", style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                    Text(
+                      "$quantity",
+                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                    ),
                     IconButton(
-                      onPressed: quantity < currentStok ? () => setSheetState(() => quantity++) : null, 
-                      icon: const Icon(Icons.add_circle_outline)
+                      onPressed: quantity < currentStok
+                          ? () => setSheetState(() => quantity++)
+                          : null,
+                      icon: const Icon(Icons.add_circle_outline),
                     ),
                   ],
                 ),
@@ -186,12 +241,18 @@ class _SalesScreenState extends State<SalesScreen> {
               const SizedBox(height: 8),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
-                decoration: BoxDecoration(color: const Color(0xFFF5F5F5), borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.black12)),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF5F5F5),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.black12),
+                ),
                 child: DropdownButtonHideUnderline(
                   child: DropdownButton<String>(
                     value: selectedPayment,
                     isExpanded: true,
-                    items: paymentMethods.map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
+                    items: paymentMethods
+                        .map((e) => DropdownMenuItem(value: e, child: Text(e)))
+                        .toList(),
                     onChanged: (v) => setSheetState(() => selectedPayment = v!),
                   ),
                 ),
@@ -202,7 +263,12 @@ class _SalesScreenState extends State<SalesScreen> {
                   Expanded(
                     child: OutlinedButton(
                       onPressed: () => Navigator.pop(context),
-                      style: OutlinedButton.styleFrom(padding: const EdgeInsets.symmetric(vertical: 16), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30))),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(30),
+                        ),
+                      ),
                       child: const Text("Batal", style: TextStyle(color: Colors.black54)),
                     ),
                   ),
@@ -213,7 +279,13 @@ class _SalesScreenState extends State<SalesScreen> {
                         Navigator.pop(context);
                         _processOrder(menu, quantity, selectedPayment, currentStok);
                       },
-                      style: ElevatedButton.styleFrom(backgroundColor: Colors.black, padding: const EdgeInsets.symmetric(vertical: 16), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30))),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.black,
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(30),
+                        ),
+                      ),
                       child: const Text("Konfirmasi", style: TextStyle(color: Colors.white)),
                     ),
                   ),
@@ -228,7 +300,8 @@ class _SalesScreenState extends State<SalesScreen> {
 
   @override
   Widget build(BuildContext context) {
-    String formattedDate = DateFormat('EEEE, d MMMM yyyy', 'id_ID').format(DateTime.now());
+    final String formattedDate =
+        DateFormat('EEEE, d MMMM yyyy', 'id_ID').format(DateTime.now());
 
     return Scaffold(
       backgroundColor: const Color(0xFFF5F5F5),
@@ -238,7 +311,10 @@ class _SalesScreenState extends State<SalesScreen> {
             subtitle: formattedDate,
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 16),
-              decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12)),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+              ),
               child: DropdownButtonHideUnderline(
                 child: DropdownButton<String>(
                   value: selectedGerobakId,
@@ -247,12 +323,17 @@ class _SalesScreenState extends State<SalesScreen> {
                   items: gerobakOptions.map((item) {
                     return DropdownMenuItem<String>(
                       value: item['id'].toString(),
-                      child: Text(item['nama_gerobak'] ?? '', style: const TextStyle(fontWeight: FontWeight.bold)),
+                      child: Text(
+                        item['nama_gerobak'] ?? '',
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
                     );
                   }).toList(),
                   onChanged: (value) {
                     if (value != null) {
-                      final selected = gerobakOptions.firstWhere((g) => g['id'].toString() == value);
+                      final selected = gerobakOptions.firstWhere(
+                        (g) => g['id'].toString() == value,
+                      );
                       SelectedGerobakStore.setGerobak(GerobakItem.fromMap(selected));
                     }
                   },
@@ -264,20 +345,25 @@ class _SalesScreenState extends State<SalesScreen> {
             child: isLoading
                 ? const Center(child: CircularProgressIndicator(color: Colors.orange))
                 : menuItems.isEmpty
-                    ? const EmptyState(icon: Icons.coffee_outlined, title: "Menu Kosong", subtitle: "Belum ada menu.")
+                    ? const EmptyState(
+                        icon: Icons.coffee_outlined,
+                        title: "Menu Kosong",
+                        subtitle: "Belum ada menu.",
+                      )
                     : GridView.builder(
                         padding: const EdgeInsets.all(16),
                         gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: 2, 
-                          childAspectRatio: 0.75, 
-                          crossAxisSpacing: 16, 
-                          mainAxisSpacing: 16
+                          crossAxisCount: 2,
+                          childAspectRatio: 0.75,
+                          crossAxisSpacing: 16,
+                          mainAxisSpacing: 16,
                         ),
                         itemCount: menuItems.length,
                         itemBuilder: (context, index) {
                           final item = menuItems[index];
                           final menu = item['menu'];
                           final int stok = item['stok_saat_ini'] ?? 0;
+
                           return InkWell(
                             onTap: stok > 0 ? () => _showTransactionSheet(menu, stok) : null,
                             borderRadius: BorderRadius.circular(16),
@@ -292,11 +378,19 @@ class _SalesScreenState extends State<SalesScreen> {
   }
 
   Widget _buildMenuCard(Map<String, dynamic> menu, int stok) {
+    final bool habis = stok <= 0;
+
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white, 
-        borderRadius: BorderRadius.circular(16), 
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4))]
+        color: habis ? Colors.grey.shade200 : Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
       ),
       child: Stack(
         children: [
@@ -306,10 +400,34 @@ class _SalesScreenState extends State<SalesScreen> {
               Expanded(
                 child: ClipRRect(
                   borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-                  child: Center(
-                    child: (menu['image_url'] != null && menu['image_url'].toString().isNotEmpty)
-                        ? Image.network(menu['image_url'], fit: BoxFit.cover, width: double.infinity, errorBuilder: (context, error, stackTrace) => const Icon(Icons.broken_image))
-                        : const Icon(Icons.image_not_supported, color: Colors.grey, size: 50),
+                  child: ColorFiltered(
+                    colorFilter: habis
+                        ? const ColorFilter.matrix([
+                            0.2126, 0.7152, 0.0722, 0, 0,
+                            0.2126, 0.7152, 0.0722, 0, 0,
+                            0.2126, 0.7152, 0.0722, 0, 0,
+                            0, 0, 0, 1, 0,
+                          ])
+                        : const ColorFilter.mode(
+                            Colors.transparent,
+                            BlendMode.multiply,
+                          ),
+                    child: Center(
+                      child: (menu['image_url'] != null &&
+                              menu['image_url'].toString().isNotEmpty)
+                          ? Image.network(
+                              menu['image_url'],
+                              fit: BoxFit.cover,
+                              width: double.infinity,
+                              errorBuilder: (context, error, stackTrace) =>
+                                  const Icon(Icons.broken_image),
+                            )
+                          : Icon(
+                              Icons.image_not_supported,
+                              color: habis ? Colors.grey.shade400 : Colors.grey,
+                              size: 50,
+                            ),
+                    ),
                   ),
                 ),
               ),
@@ -318,20 +436,46 @@ class _SalesScreenState extends State<SalesScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(menu['name'] ?? 'Menu', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14), maxLines: 1, overflow: TextOverflow.ellipsis),
+                    Text(
+                      menu['name'] ?? 'Menu',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                        color: habis ? Colors.grey : Colors.black,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                     const SizedBox(height: 4),
-                    Text(CurrencyFormatter.format(menu['price'] ?? 0), style: const TextStyle(color: Colors.orange, fontWeight: FontWeight.bold)),
+                    Text(
+                      CurrencyFormatter.format(menu['price'] ?? 0),
+                      style: TextStyle(
+                        color: habis ? Colors.grey : Colors.orange,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                   ],
                 ),
               ),
             ],
           ),
           Positioned(
-            top: 10, right: 10,
+            top: 10,
+            right: 10,
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              decoration: BoxDecoration(color: stok <= 0 ? Colors.red : Colors.black87, borderRadius: BorderRadius.circular(20)),
-              child: Text(stok <= 0 ? "Habis" : "Stok $stok", style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+              decoration: BoxDecoration(
+                color: habis ? Colors.grey : Colors.black87,
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Text(
+                habis ? "Habis" : "Stok $stok",
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
             ),
           ),
         ],

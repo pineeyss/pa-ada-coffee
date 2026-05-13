@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class StockService {
@@ -214,25 +215,57 @@ class StockService {
   }
 
   Future<void> resetStockIfNewDay() async {
-  final today = DateTime.now();
-  final todayStr = "${today.year}-${today.month}-${today.day}";
+    final lastReset = await _getLastResetDate();
+    final today = DateTime.now();
+    final todayStr =
+        "${today.year}-${today.month.toString().padLeft(2, '0')}-${today.day.toString().padLeft(2, '0')}";
 
-  final stocks = await supabase
-      .from('stocks')
-      .select('id, last_reset_date');
+    // Jika sudah pernah reset hari ini, skip
+    if (lastReset == todayStr) return;
 
-  for (final item in stocks) {
-    final lastReset = item['last_reset_date']?.toString();
+    try {
+      // Reset stok_saat_ini ke stok_awal masing-masing item
+      final stocks = await supabase
+          .from('stok_gerobak')
+          .select('id, stok_awal');
 
-    if (lastReset != todayStr) {
-      await supabase
-          .from('stocks')
-          .update({
-            'stock': 10,
-            'last_reset_date': todayStr,
-          })
-          .eq('id', item['id']);
+      for (final item in stocks) {
+        final stokAwal = (item['stok_awal'] ?? 10) as int;
+        await supabase
+            .from('stok_gerobak')
+            .update({'stok_saat_ini': stokAwal})
+            .eq('id', item['id']);
+      }
+
+      await _saveLastResetDate(todayStr);
+    } catch (e) {
+      debugPrint('resetStockIfNewDay error: $e');
     }
   }
-}
+
+  Future<String?> _getLastResetDate() async {
+    try {
+      final user = supabase.auth.currentUser;
+      if (user == null) return null;
+      final result = await supabase
+          .from('app_settings')
+          .select('value')
+          .eq('key', 'last_stock_reset_date')
+          .maybeSingle();
+      return result?['value']?.toString();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> _saveLastResetDate(String dateStr) async {
+    try {
+      await supabase.from('app_settings').upsert({
+        'key': 'last_stock_reset_date',
+        'value': dateStr,
+      }, onConflict: 'key');
+    } catch (e) {
+      debugPrint('_saveLastResetDate error: $e');
+    }
+  }
 }

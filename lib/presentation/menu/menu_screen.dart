@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import '../../data/models/menu_item_model.dart';
 import '../../data/services/menu_service.dart';
 import '../widgets/header.dart';
+import '../../core/supabase/selected_gerobak_store.dart';
 
 class MenuScreen extends StatefulWidget {
   const MenuScreen({super.key});
@@ -967,6 +968,7 @@ class _MenuScreenState extends State<MenuScreen> {
                 if (!mounted) return;
                 Navigator.pop(dialogContext);
                 await loadMenus();
+                SelectedGerobakStore.notifyMenuChanged();
 
                 if (!mounted) return;
                 ScaffoldMessenger.of(context).showSnackBar(
